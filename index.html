@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loading…</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+      #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+      #ui { position: fixed; inset: 0; pointer-events: none; }
+      #ui > * { pointer-events: auto; }
+
+      /* Generic placeholder screens */
+      .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #eee; }
+      .screen h1 { margin: 0 0 8px; font-size: 28px; }
+      .screen button { font-size: 16px; padding: 8px 16px; cursor: pointer; }
+      .screen button:disabled { cursor: not-allowed; opacity: 0.5; }
+      .screen .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+      .screen .prose { max-width: 640px; text-align: left; line-height: 1.5; }
+      .screen .prose h2 { font-size: 18px; margin: 16px 0 4px; }
+      .screen .prose p { margin: 0 0 8px; }
+
+      /* Main menu — layout after the reference: dark field, white band, lockup left, banner right, list below */
+      .screen.menu { display: block; background: #3a3a3a; color: #fff; }
+      .menu .gothic { font-family: 'Old English Text MT', 'Luminari', 'Cloister Black', 'Blackletter', 'UnifrakturMaguntia', fantasy, serif; }
+      .menu .outlined { color: #fff; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 6px rgba(0,0,0,0.5); }
+      .menu .version { position: absolute; top: 6px; right: 12px; font-size: 14px; }
+      .menu .band { position: absolute; top: 44px; left: 0; right: 0; height: 160px; background: #fff; }
+      .menu .lockup { position: absolute; top: 40px; left: 32px; line-height: 1; }
+      .menu .lockup .leading { display: block; font-size: 28px; margin-bottom: -6px; padding-left: 6px; }
+      .menu .lockup .primary { display: block; font-size: 112px; letter-spacing: 1px; }
+      .menu .banner { position: absolute; top: 52px; right: 60px; height: 190px; }
+      .menu .banner img { height: 100%; width: auto; }
+      .menu .entries { position: absolute; top: 260px; left: 48px; display: flex; flex-direction: column; gap: 4px; }
+      .menu .entries button { background: none; border: 0; padding: 4px 0; text-align: left; font-size: 44px; line-height: 1.2; cursor: pointer; }
+      .menu .entries button:hover, .menu .entries button:focus-visible { color: #ffd966; outline: none; }
+      @media (max-height: 640px) {
+        .menu .lockup .primary { font-size: 72px; }
+        .menu .entries { top: 220px; }
+        .menu .entries button { font-size: 30px; }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="ui"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 220" width="520" height="220">
+  <!-- PLACEHOLDER banner: three silhouettes standing in for the starter trio.
+       The race-art slice replaces this file at the same path; no code change needed. -->
+  <defs>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
+    <g id="figure">
+      <ellipse cx="0" cy="190" rx="48" ry="12" fill="#000" opacity="0.5"/>
+      <rect x="-14" y="80" width="28" height="70" rx="6" fill="#222"/>
+      <rect x="-16" y="145" width="12" height="42" rx="4" fill="#222"/>
+      <rect x="4" y="145" width="12" height="42" rx="4" fill="#222"/>
+      <circle cx="0" cy="62" r="18" fill="#222"/>
+    </g>
+  </defs>
+  <g filter="url(#soft)" opacity="0.6">
+    <use href="#figure" x="100" y="0" fill="#000"/>
+    <use href="#figure" x="260" y="0"/>
+    <use href="#figure" x="420" y="0"/>
+  </g>
+  <use href="#figure" x="100" y="0"/>
+  <line x1="60" y1="150" x2="150" y2="70" stroke="#222" stroke-width="5" stroke-linecap="round"/>
+  <use href="#figure" x="260" y="0"/>
+  <circle cx="230" cy="110" r="22" fill="#333"/>
+  <line x1="290" y1="120" x2="330" y2="80" stroke="#222" stroke-width="5" stroke-linecap="round"/>
+  <use href="#figure" x="420" y="0"/>
+  <path d="M 450 60 Q 500 115 450 170" fill="none" stroke="#222" stroke-width="5" stroke-linecap="round"/>
+  <line x1="450" y1="60" x2="450" y2="170" stroke="#222" stroke-width="2"/>
+</svg>
