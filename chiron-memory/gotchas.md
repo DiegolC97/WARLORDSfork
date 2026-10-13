@@ -31,3 +31,11 @@ What: Headless Chrome screenshots taken by opening about:blank and injecting con
 ## The chiron-ontology MCP tools (ontology_search, etc.) reported "Agent is not enrolled in…
 
 What: The chiron-ontology MCP tools (ontology_search, etc.) reported "Agent is not enrolled in this project" and returned nothing throughout this project's sessions, so the Warlords rules document could not be read directly from the ontology and had to be worked from quoted work-order text and assumptions instead. · Why: — · Learned: don't assume ontology_search will succeed for this project; verify enrollment or fall back to work-order text, flagging unverified assumptions (race roster ids, unit display names, instructions text, win conditions) for later checking against the rules document. <!-- id: 6e92c05f-ca91-4e6f-99a7-e2d88a4637d7-13 -->
+
+## Vitest will not run a test file outside the project root
+
+What: A test file placed in the session scratchpad fails with "Cannot find module '/@fs/…'" even when passed through `include`, because Vite only serves files under the project root · Why: Vite's /@fs/ serving is restricted to the root and allowed dirs · Learned: for a one-off rendering snapshot, drop a temporary `*.test.ts` under src/, run it by path, and delete it in the same command
+
+## Writing to the SaveStore behind the live CampaignAccess is overwritten on the next update
+
+What: In app-level tests, `app.store.write(...)` after the app has booted does not change what screens see: `createCampaignAccess` keeps its own current save and the next `update` writes that back over the store · Why: the campaign access is the in-memory truth and the store is write-through from it · Where: src/save/saveStore.ts (createCampaignAccess) · Learned: seed storage before `createApp`, or go through ctx.campaign.update

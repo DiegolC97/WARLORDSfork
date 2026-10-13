@@ -64,3 +64,19 @@ What: The single-slot campaign save is only ever read/written through one SaveSt
 ## The starting race is left unset (null) in save defaults rather than randomly chosen, with…
 
 What: The starting race is left unset (null) in save defaults rather than randomly chosen, with the player picking one of the six races before the first battle; the choice is written to the save at that moment. · Why: work order explicitly overrides the rules document's stated "random race" default to require player choice, adapted to the six-race roster. · Where: src/save/schema.ts (defaults), campaign map placeholder screen (race picker). · Learned: when a work order explicitly contradicts a quoted rules-document default, the work order's explicit requirement wins. <!-- id: 6e92c05f-ca91-4e6f-99a7-e2d88a4637d7-3 -->
+
+## Campaign map is six blocs of four plus four contested regions, with an own-race holdout
+
+What: The 28-region map is six blocs of four (one per race1…race6) plus four contested regions in the centre; the player starts with three regions of their race's bloc and the bloc's fourth region is a holdout defended by their own race, so a full conquest is exactly 25 battles · Why: six races cannot divide 28 evenly and the original's 25-battle progression and its unlock had to survive; the holdout keeps the 6×4 structure while leaving 25 defended regions · Where: src/campaign/regions.ts (REGIONS, BLOCS), src/campaign/rules.ts (initialOwners, applyVictory) · Learned: when a count must be preserved across a structural redesign, derive the structure from the count first and write the test (simulate the full conquest) before the data
+
+## The unlockable race is race7, which owns no bloc and starts from a host bloc
+
+What: Finishing a campaign sets raceUnlocked, which makes a seventh race id (race7, placeholder display name) selectable; race7 holds no territory, so a campaign played as it starts from race6's bloc (`startingBloc`) · Why: the user chose a seventh race over locking one of the six bloc races, so all six blocs stay owned by always-selectable races · Where: src/save/schema.ts (RACES, BLOC_RACES, UNLOCKABLE_RACE, selectableRaces), src/campaign/rules.ts · Learned: a race that is not on the map still needs a defined starting position; make it data, not a special case in the renderer
+
+## The region under attack is carried in the save as battleRegion
+
+What: The map writes `battleRegion` to the save when the player attacks and the battle screen reads it to field the defenders; it is cleared on victory, retreat and whenever the map is reopened · Why: screens may only talk through navigation events and the shared campaign access, so the save is the only channel from map to battle; a pending battle surviving a quit is dropped rather than resumed · Where: src/save/schema.ts (schema 3), src/screens/map/index.ts, src/screens/battle/index.ts
+
+## Map colours are the Okabe–Ito palette, verified under three deficiency simulations
+
+What: Bloc fills use Okabe–Ito colours (race1 blue, race2 orange, race3 sky blue, race4 green, race5 reddish purple, race6 yellow, race7 vermilion) with light grey hatching for contested; a test simulates protanopia, deuteranopia and tritanopia (Machado 2009 matrices) and requires pairwise ΔE2000 ≥ 10 · Why: the acceptance criterion requires the six bloc colours plus contested to remain distinguishable under colour-blindness simulation; the closest pair sits at 10.9 · Where: src/campaign/palette.ts, src/campaign/palette.test.ts · Learned: keep a non-colour cue too (hatch, outline, glyph) so the palette is not the only channel

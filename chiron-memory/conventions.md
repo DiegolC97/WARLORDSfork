@@ -31,3 +31,11 @@ What: Each screen declares its own asset manifest (textures, texture atlases, JS
 ## All player-facing working names (game title, race names, unit names, original-game credit…
 
 What: All player-facing working names (game title, race names, unit names, original-game credit) live only in src/names/displayNames.ts; a scripts/check-names.mjs script fails the build if any of those strings appear anywhere else in src/, public/ or index.html. · Why: to guarantee the remake's branding/naming can be swapped without hunting through code, and to keep original IP names isolated to one auditable file. · Where: src/names/displayNames.ts, scripts/check-names.mjs, wired into npm run build and CI. · Learned: check the built JS bundle too (not just source) to confirm each working name appears exactly once, sourced only from the naming file — one incidental "iPhone" match came from the PlayCanvas engine's own platform-detection code, not project sources, and is a false positive to expect. <!-- id: 6e92c05f-ca91-4e6f-99a7-e2d88a4637d7-7 -->
+
+## Region names live in the naming file; the map data holds only ids
+
+What: Campaign region names are in `REGION_NAMES` in src/names/displayNames.ts, keyed by opaque ids r01…r28, and rendered with `regionName(id)`; src/campaign/regions.ts holds structure and layout only · Why: the naming file is the single place every user-visible name is spelled, and names drafted for a setting may be revised at release without touching data or saves · Where: src/names/displayNames.ts, src/campaign/regions.ts, src/campaign/regions.test.ts (distinctness and published-setting denylist)
+
+## Campaign rules are pure functions in src/campaign; screens only render and call them
+
+What: Ownership, attackability, battle setup, victory and new-campaign logic are pure functions over the save in src/campaign/rules.ts; the map and battle screens call them and write the returned patch through ctx.campaign · Why: the 25-battle simulation and the adjacency rules can be tested without the DOM, and the battle slice can replace the placeholder screen without touching the rules · Where: src/campaign/rules.ts, src/screens/map/index.ts, src/screens/battle/index.ts
