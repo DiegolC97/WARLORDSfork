@@ -2,9 +2,10 @@
 
 A fan remake on the [PlayCanvas](https://playcanvas.com) engine. This
 repository currently contains the playable skeleton: an app shell, the main
-menu with its instructions, options and credits screens, placeholder campaign
+menu with its instructions, options and credits screens, the campaign map
+with its 28 regions and conquest rules, placeholder shop/battle/result
 screens, navigation between them, and the single-slot campaign save. No
-gameplay yet.
+battle gameplay yet.
 
 The working title and the working race names collide with a live commercial
 setting. They live in exactly one file, `src/names/displayNames.ts`, and the
@@ -44,8 +45,10 @@ src/main.ts             browser entry: creates the PlayCanvas host and boots the
 src/app.ts              composition root (save store → campaign → shell)
 src/engine/             EngineHost seam: playcanvasHost (real) and nullHost (headless tests)
 src/assets/loader.ts    manifest-driven asset loading (textures, atlases, json, audio, font)
-src/names/              display names: game title, race names, unit names, original-game credit
+src/names/              display names: game title, race names, unit names, region names, original-game credit
 src/save/               the ONLY code that touches stored data (schema, migrations, saveStore)
+src/campaign/           the campaign map as data (regions, blocs, adjacency, palette) and its pure rules
+src/roster/             roster seam: which unit ids each race fields, and the contested mixed army
 src/shell/routes.ts     navigation as data: screen id + event → next screen id
 src/shell/screenShell.ts  holds exactly one active screen, runs transitions
 src/screens/<id>/       one folder per screen; index.ts is its only public file
@@ -87,6 +90,40 @@ Options carries sound, music and the rendering zoom. The battle screen scales
 its scene root by the saved zoom, so anything the battle slice parents under
 `ctx.root` inherits it.
 
+### Campaign map
+
+`src/campaign/regions.ts` defines the map as data: 28 regions on a hex
+layout, six blocs of four (one per race `race1`…`race6`) plus four contested
+regions in the centre that belong to no race, and an explicit adjacency list.
+Tests check the counts, that adjacency is symmetric and matches the hex
+geometry, that the map is connected, and that every bloc borders the centre.
+
+A campaign starts when the player picks a race: three regions of that race's
+bloc are theirs, the bloc's fourth region (the one facing the centre) is a
+holdout defended by the same race, and every other region is defended by its
+bloc's race. Contested regions are defended by a mixed host drawn from every
+bloc race's roster with a stat multiplier (`CONTESTED_STAT_BONUS`), making
+them the hardest battles. Conquering all 25 remaining regions is exactly 25
+battles; the last one sets `raceUnlocked`, which makes `race7` selectable in
+later campaigns. `race7` owns no bloc, so it starts from a host bloc
+(`startingBloc`).
+
+The map draws an arrow from the player's territory to every region adjacent
+to a holding (`attackableRegions`); clicking one (or its "Attack …" button)
+writes `battleRegion` to the save and goes to battle. The battle screen reads
+it, fields the defending race's roster through `src/roster`, and on "Finish
+battle" applies `applyVictory` — the region recolours to the player's race
+and the arrows update when the map is shown again. When no attack is legal
+(the map is fully conquered) the map says so and offers "New campaign", which
+resets progress but keeps settings and the unlock. A `battleRegion` left
+pending is dropped when the map is reopened.
+
+Colours come from the Okabe–Ito palette (`src/campaign/palette.ts`);
+`palette.test.ts` simulates protanopia, deuteranopia and tritanopia and
+requires every pair of the six bloc colours and the contested colour to stay
+apart. Contested regions are also hatched and the player's holdings outlined,
+so colour is never the only cue.
+
 To add a screen: add its id to `SCREEN_IDS`, add a row to `ROUTES`, create
 `src/screens/<id>/index.ts` exporting a `ScreenDefinition`, and register it in
 `src/screens/index.ts`. The route tests fail if a screen is unreachable from
@@ -103,8 +140,11 @@ the game title (as a two-line lockup), the six race names, the unit names, and
 the original game's title and author for the credits screen. Code, data and
 assets use internal identifiers instead:
 
-- race ids are `race1`…`race6` in roster order (`RACES` in `src/save/schema.ts`);
-- unit ids are the numbers the save's `ownedUnits` holds.
+- race ids are `race1`…`race7` in roster order (`RACES` in `src/save/schema.ts`;
+  `race1`…`race6` hold territory, `race7` is unlocked by finishing a campaign);
+- unit ids are the numbers the save's `ownedUnits` holds (0–2 the shared starting
+  trio, 10+ each race's exclusive, see `src/roster`);
+- region ids are `r01`…`r28` (`REGION_IDS` in `src/campaign/regions.ts`).
 
 They are opaque on purpose so a display rename never touches them. Renaming
 for release is one edit to the naming file. `npm run check:names` reads the
@@ -137,10 +177,11 @@ from the rules document (section 15) plus the rendering zoom:
 | `autoSendOn` | boolean | `false` |
 | `gold` | integer | `500` |
 | `lifetimeKills` | integer | `0` |
-| `chosenRace` | `race1`…`race6`, or `null` | `null` — the player picks before the first battle |
+| `chosenRace` | `race1`…`race7`, or `null` | `null` — the player picks before the first battle |
 | `ownedUnits` | integer[] | `[0, 1, 2]` |
 | `upgradeLevels` | `{ [upgradeId]: level }` | `{}` |
-| `regionOwners` | `{ [regionId]: owner \| null }` | `{}` |
+| `regionOwners` | `{ [regionId]: 'player' \| raceId \| null }` | `{}` — filled when a race is picked; `null` is an untaken contested region |
+| `battleRegion` | region id or `null` (schema 3+) | `null` — the region under attack during a campaign battle |
 
 Screens read and write the campaign through `ctx.campaign` (`read()` /
 `update(patch)`); every update is persisted immediately. Only
@@ -167,4 +208,5 @@ The game always starts. `SaveStore.load()` reports what happened:
    validation, so older saves keep working.
 3. Update the validator for the new fields.
 
-Schema history: 1 — initial; 2 — added `zoom` (migration sets it to `1`).
+Schema history: 1 — initial; 2 — added `zoom` (migration sets it to `1`);
+3 — added `battleRegion` (migration sets it to `null`) and the `race7` id.

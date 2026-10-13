@@ -44,6 +44,7 @@ const fullCampaign = (): CampaignSave => ({
   ownedUnits: [0, 1, 2, 5, 8],
   upgradeLevels: { attack: 2, defence: 1, speed: 0 },
   regionOwners: { r1: 'race2', r2: 'race4', r3: null },
+  battleRegion: 'r2',
 });
 
 describe('SaveStore — defaults (AC 4)', () => {
@@ -143,19 +144,20 @@ describe('SaveStore — damaged saves (AC 6)', () => {
 });
 
 describe('SaveStore — migration path (AC 7)', () => {
-  /** A save exactly as the version-1 build wrote it (no `zoom` field). */
+  /** A save exactly as the version-1 build wrote it (no `zoom`, no `battleRegion`). */
   const v1Save = (): Record<string, unknown> => {
-    const { zoom: _zoom, ...rest } = fullCampaign();
+    const { zoom: _zoom, battleRegion: _battleRegion, ...rest } = fullCampaign();
     return { ...rest, schemaVersion: 1 };
   };
 
-  it('a version-1 save loads on the current build through the production chain (1 → 2 adds zoom)', () => {
+  it('a version-1 save loads on the current build through the production chain (1 → 2 adds zoom, 2 → 3 adds battleRegion)', () => {
     const storage = new MemoryStorage();
     storage.setItem(SAVE_KEY, JSON.stringify(v1Save()));
     const { save, outcome } = new SaveStore({ storage }).load();
     expect(outcome).toBe('migrated');
     expect(save.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
     expect(save.zoom).toBe(1);
+    expect(save.battleRegion).toBeNull();
     for (const field of RULES_FIELDS) {
       if (field === 'zoom') continue;
       expect(save[field], `field ${field}`).toEqual(fullCampaign()[field]);
@@ -163,20 +165,32 @@ describe('SaveStore — migration path (AC 7)', () => {
     expect(new SaveStore({ storage }).load().outcome).toBe('loaded');
   });
 
+  it('a version-2 save (no battleRegion) loads with battleRegion null', () => {
+    const storage = new MemoryStorage();
+    const { battleRegion: _battleRegion, ...v2 } = fullCampaign();
+    storage.setItem(SAVE_KEY, JSON.stringify({ ...v2, schemaVersion: 2 }));
+    const { save, outcome } = new SaveStore({ storage }).load();
+    expect(outcome).toBe('migrated');
+    expect(save.battleRegion).toBeNull();
+    expect(save.regionOwners).toEqual(fullCampaign().regionOwners);
+  });
+
   it('a version-1 save survives a later schema change through the migration chain', () => {
-    // Simulate a future build: schema 3 renames `lifetimeKills` → `kills` and adds `difficulty`,
-    // schema 4 restores the rules-document name so the current validator accepts it.
-    const toV3: Migration = {
-      from: 2,
-      to: 3,
+    // Simulate a future build: the next schema renames `lifetimeKills` → `kills` and adds
+    // `difficulty`, the one after restores the rules-document name so the current validator
+    // accepts it.
+    const next = SAVE_SCHEMA_VERSION + 1;
+    const toNext: Migration = {
+      from: SAVE_SCHEMA_VERSION,
+      to: next,
       apply: (raw) => {
         const { lifetimeKills, ...rest } = raw;
         return { ...rest, kills: lifetimeKills, difficulty: 'normal' };
       },
     };
-    const toV4: Migration = {
-      from: 3,
-      to: 4,
+    const toAfter: Migration = {
+      from: next,
+      to: next + 1,
       apply: (raw) => {
         const { kills, difficulty: _difficulty, ...rest } = raw;
         return { ...rest, lifetimeKills: kills };
@@ -186,11 +200,11 @@ describe('SaveStore — migration path (AC 7)', () => {
     const storage = new MemoryStorage();
     storage.setItem(SAVE_KEY, JSON.stringify(v1Save()));
 
-    const futureStore = new SaveStore({ storage, migrations: [...MIGRATIONS, toV3, toV4], targetVersion: 4 });
+    const futureStore = new SaveStore({ storage, migrations: [...MIGRATIONS, toNext, toAfter], targetVersion: next + 1 });
     const { save, outcome } = futureStore.load();
 
     expect(outcome).toBe('migrated');
-    expect(save.schemaVersion).toBe(4);
+    expect(save.schemaVersion).toBe(next + 1);
     // Campaign progress intact.
     expect(save.campaignLevel).toBe(7);
     expect(save.gold).toBe(1234);
@@ -199,7 +213,7 @@ describe('SaveStore — migration path (AC 7)', () => {
     expect(save.ownedUnits).toEqual([0, 1, 2, 5, 8]);
     expect(save.regionOwners).toEqual({ r1: 'race2', r2: 'race4', r3: null });
     // Written back at the new version, so the next load is a plain "loaded".
-    expect(JSON.parse(storage.getItem(SAVE_KEY)!).schemaVersion).toBe(4);
+    expect(JSON.parse(storage.getItem(SAVE_KEY)!).schemaVersion).toBe(next + 1);
     expect(futureStore.load().outcome).toBe('loaded');
   });
 

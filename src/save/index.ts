@@ -1,6 +1,9 @@
 export {
   SAVE_SCHEMA_VERSION,
   RACES,
+  BLOC_RACES,
+  UNLOCKABLE_RACE,
+  selectableRaces,
   QUALITIES,
   ZOOM_LEVELS,
   DEFAULT_ZOOM,
@@ -8,6 +11,7 @@ export {
   validateSave,
   type CampaignSave,
   type RaceId,
+  type BlocRaceId,
   type Quality,
   type ZoomLevel,
 } from './schema';

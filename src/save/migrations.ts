@@ -25,6 +25,12 @@ export const MIGRATIONS: readonly Migration[] = [
     to: 2,
     apply: (raw) => ({ ...raw, zoom: 1 }),
   },
+  {
+    // 2 → 3: the campaign map records which region a battle is fought over.
+    from: 2,
+    to: 3,
+    apply: (raw) => ({ ...raw, battleRegion: null }),
+  },
 ];
 
 export type MigrateResult =

@@ -9,18 +9,34 @@
 
 /**
  * Bump when the shape of `CampaignSave` changes; add a step to `migrations.ts`.
- * History: 1 — initial; 2 — added `zoom`.
+ * History: 1 — initial; 2 — added `zoom`; 3 — added `battleRegion`, race7.
  */
-export const SAVE_SCHEMA_VERSION = 2;
+export const SAVE_SCHEMA_VERSION = 3;
 
 /**
- * The six playable races in roster order. Ids are deliberately opaque so a
+ * Every race id in roster order. Ids are deliberately opaque so a
  * display-name change never touches code, data or saves; the names live in
  * `src/names/displayNames.ts`.
+ *
+ * race1…race6 each own a bloc of the campaign map and can be picked for a
+ * new campaign from the start. race7 owns no territory: it is the additional
+ * race the campaign awards, selectable only once `raceUnlocked` is true.
  */
-export const RACES = ['race1', 'race2', 'race3', 'race4', 'race5', 'race6'] as const;
+export const RACES = ['race1', 'race2', 'race3', 'race4', 'race5', 'race6', 'race7'] as const;
 
 export type RaceId = (typeof RACES)[number];
+
+/** The six races that hold territory on the campaign map and are always selectable. */
+export const BLOC_RACES = ['race1', 'race2', 'race3', 'race4', 'race5', 'race6'] as const;
+export type BlocRaceId = (typeof BLOC_RACES)[number];
+
+/** The race awarded by conquering the whole map. */
+export const UNLOCKABLE_RACE: RaceId = 'race7';
+
+/** Races the player may pick for a new campaign given the unlock flag. */
+export function selectableRaces(raceUnlocked: boolean): readonly RaceId[] {
+  return raceUnlocked ? RACES : BLOC_RACES;
+}
 
 export const QUALITIES = ['low', 'medium', 'high'] as const;
 export type Quality = (typeof QUALITIES)[number];
@@ -52,8 +68,18 @@ export interface CampaignSave {
   ownedUnits: number[];
   /** Level of each upgrade, keyed by upgrade id. */
   upgradeLevels: Record<string, number>;
-  /** Owner of each region, keyed by region id. `null` means unowned. */
+  /**
+   * Owner of each region, keyed by region id: `'player'`, a race id, or
+   * `null` for an unconquered contested region. Empty until the player picks
+   * a race, which starts the campaign (schema 3 semantics; see src/campaign).
+   */
   regionOwners: Record<string, string | null>;
+  /**
+   * Region the player is currently attacking, written by the map when a
+   * battle is launched and cleared when it ends (schema 3+). `null` outside a
+   * campaign battle, e.g. a two-player skirmish.
+   */
+  battleRegion: string | null;
 }
 
 /**
@@ -78,6 +104,7 @@ export function defaultSave(): CampaignSave {
     ownedUnits: [0, 1, 2],
     upgradeLevels: {},
     regionOwners: {},
+    battleRegion: null,
   };
 }
 
@@ -116,7 +143,7 @@ export function validateSave(
   if (!isNonNegativeInt(value.gold)) return fail('gold is not a non-negative integer');
   if (!isNonNegativeInt(value.lifetimeKills)) return fail('lifetimeKills is not a non-negative integer');
   if (value.chosenRace !== null && !RACES.includes(value.chosenRace as RaceId)) {
-    return fail('chosenRace is not null or one of the six races');
+    return fail('chosenRace is not null or a known race');
   }
   if (!Array.isArray(value.ownedUnits) || !value.ownedUnits.every(isNonNegativeInt)) {
     return fail('ownedUnits is not an array of non-negative integers');
@@ -129,6 +156,9 @@ export function validateSave(
     !Object.values(value.regionOwners).every((o) => o === null || typeof o === 'string')
   ) {
     return fail('regionOwners is not a map of string|null');
+  }
+  if (value.battleRegion !== null && typeof value.battleRegion !== 'string') {
+    return fail('battleRegion is not a string or null');
   }
 
   const save: CampaignSave = {
@@ -146,6 +176,7 @@ export function validateSave(
     ownedUnits: [...value.ownedUnits],
     upgradeLevels: { ...(value.upgradeLevels as Record<string, number>) },
     regionOwners: { ...(value.regionOwners as Record<string, string | null>) },
+    battleRegion: value.battleRegion as string | null,
   };
   return { ok: true, save };
 }

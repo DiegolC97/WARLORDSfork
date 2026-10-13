@@ -20,6 +20,28 @@
       .screen .prose h2 { font-size: 18px; margin: 16px 0 4px; }
       .screen .prose p { margin: 0 0 8px; }
 
+      /* Campaign map */
+      .screen.map { justify-content: flex-start; padding-top: 8px; gap: 6px; overflow: auto; }
+      .screen.map h1 { font-size: 22px; margin: 0; }
+      .screen.map p { margin: 0; }
+      .screen.map .hint { max-width: 720px; text-align: center; font-size: 13px; opacity: 0.85; line-height: 1.4; }
+      .map .map-slot { width: min(92vw, 760px); }
+      .map svg[data-role="map"] { width: 100%; height: auto; display: block; max-height: 58vh; }
+      .map .region polygon { stroke: #10131a; stroke-width: 2; transition: fill 150ms; }
+      .map .region.held polygon { stroke: #ffffff; stroke-width: 4; }
+      .map .region.attackable { cursor: pointer; }
+      .map .region.attackable polygon { stroke: #ffffff; stroke-width: 3; stroke-dasharray: 6 4; animation: march 1s linear infinite; }
+      .map .region.attackable:hover polygon { filter: brightness(1.15); }
+      .map .region text { font-size: 10px; pointer-events: none; font-family: system-ui, sans-serif; }
+      .map .region .defender { font-size: 9px; font-style: italic; }
+      .map .arrow { stroke: #ffffff; stroke-width: 3; stroke-linecap: round; pointer-events: none; filter: drop-shadow(0 0 2px #000); }
+      @keyframes march { to { stroke-dashoffset: -10; } }
+      .map .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; font-size: 12px; }
+      .map .swatch { display: inline-flex; align-items: center; gap: 5px; }
+      .map .swatch i { display: inline-block; width: 14px; height: 14px; border: 1px solid #10131a; }
+      .map .swatch i.player { border: 2px solid #ffffff; }
+      .map [data-role="targets"] button, .map [data-role="race-picker"] button { font-size: 13px; padding: 5px 10px; }
+
       /* Main menu — layout after the reference: dark field, white band, lockup left, banner right, list below */
       .screen.menu { display: block; background: #3a3a3a; color: #fff; }
       .menu .gothic { font-family: 'Old English Text MT', 'Luminari', 'Cloister Black', 'Blackletter', 'UnifrakturMaguntia', fantasy, serif; }

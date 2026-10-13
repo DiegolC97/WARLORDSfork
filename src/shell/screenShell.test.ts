@@ -96,11 +96,11 @@ describe('ScreenShell', () => {
     await click('back');
     assertExactlyOneActive('map');
     await click('pick-race:race3');
-    await click('battle');
+    await click('attack:r12');
     assertExactlyOneActive('battle');
     await click('retreat');
     assertExactlyOneActive('map');
-    await click('battle');
+    await click('attack:r12');
     await click('finished');
     assertExactlyOneActive('result');
     await click('continue');
@@ -128,15 +128,17 @@ describe('ScreenShell', () => {
 });
 
 describe('race pick before the first battle', () => {
-  it('battle is disabled until a race is chosen; the pick is written to the save', async () => {
+  const attackButtons = () => overlayRoot.querySelectorAll('button[data-action^="attack:"]');
+
+  it('no battle can be launched until a race is chosen; the pick is written to the save', async () => {
     await click('ready');
     await click('campaign');
-    const battle = overlayRoot.querySelector<HTMLButtonElement>('button[data-action="battle"]')!;
-    expect(battle.disabled).toBe(true);
+    expect(attackButtons()).toHaveLength(0);
+    expect(overlayRoot.querySelector('[data-region][data-attackable]')).toBeNull();
     expect(new SaveStore({ storage }).load().save.chosenRace).toBeNull();
 
     await click('pick-race:race5');
-    expect(battle.disabled).toBe(false);
+    expect(attackButtons().length).toBeGreaterThan(0);
     expect(new SaveStore({ storage }).load().save.chosenRace).toBe('race5');
   });
 
@@ -148,7 +150,8 @@ describe('race pick before the first battle', () => {
     app = await createApp({ host: new NullEngineHost(), overlayRoot, storage });
     await click('ready');
     await click('campaign');
-    expect(overlayRoot.querySelector<HTMLButtonElement>('button[data-action="battle"]')!.disabled).toBe(false);
+    expect(overlayRoot.querySelector('button[data-action^="pick-race:"]')).toBeNull();
+    expect(attackButtons().length).toBeGreaterThan(0);
   });
 });
 
