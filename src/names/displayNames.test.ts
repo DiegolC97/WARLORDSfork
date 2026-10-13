@@ -11,7 +11,7 @@ describe('display names', () => {
     }
   });
 
-  it('has a display name for every starting unit', () => {
+  it('has a base name for every starting unit', () => {
     for (const unit of defaultSave().ownedUnits) expect(UNIT_NAMES[unit], `unit ${unit}`).toBeTruthy();
   });
 

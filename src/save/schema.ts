@@ -6,6 +6,8 @@
  * when no save exists, and validation of untrusted data. Reading and writing
  * stored bytes is the job of `saveStore.ts`.
  */
+import { ROSTER } from '../roster/data';
+import { BLOC_RACES, RACES, type RaceId } from '../roster/races';
 
 /**
  * Bump when the shape of `CampaignSave` changes; add a step to `migrations.ts`.
@@ -14,24 +16,10 @@
 export const SAVE_SCHEMA_VERSION = 3;
 
 /**
- * Every race id in roster order. Ids are deliberately opaque so a
- * display-name change never touches code, data or saves; the names live in
- * `src/names/displayNames.ts`.
- *
- * race1…race6 each own a bloc of the campaign map and can be picked for a
- * new campaign from the start. race7 owns no territory: it is the additional
- * race the campaign awards, selectable only once `raceUnlocked` is true.
+ * Race ids come from the roster definition (`src/roster/races.ts`) and are
+ * re-exported here because the save stores one. They are opaque on purpose.
  */
-export const RACES = ['race1', 'race2', 'race3', 'race4', 'race5', 'race6', 'race7'] as const;
-
-export type RaceId = (typeof RACES)[number];
-
-/** The six races that hold territory on the campaign map and are always selectable. */
-export const BLOC_RACES = ['race1', 'race2', 'race3', 'race4', 'race5', 'race6'] as const;
-export type BlocRaceId = (typeof BLOC_RACES)[number];
-
-/** The race awarded by conquering the whole map. */
-export const UNLOCKABLE_RACE: RaceId = 'race7';
+export { RACES, BLOC_RACES, UNLOCKABLE_RACE, type RaceId, type BlocRaceId } from '../roster/races';
 
 /** Races the player may pick for a new campaign given the unlock flag. */
 export function selectableRaces(raceUnlocked: boolean): readonly RaceId[] {
@@ -84,7 +72,8 @@ export interface CampaignSave {
 
 /**
  * Defaults from the rules document when no save exists: sound on, music on,
- * auto-send off, quality medium, gold 500, kills 0, starting units 0, 1 and 2.
+ * auto-send off, quality medium, gold 500, kills 0, and the roster's starting
+ * trio as the army.
  * The document says "a random race"; this project instead leaves the race
  * unset and lets the player pick one before the first battle.
  */
@@ -101,7 +90,7 @@ export function defaultSave(): CampaignSave {
     gold: 500,
     lifetimeKills: 0,
     chosenRace: null,
-    ownedUnits: [0, 1, 2],
+    ownedUnits: [...ROSTER.starters],
     upgradeLevels: {},
     regionOwners: {},
     battleRegion: null,

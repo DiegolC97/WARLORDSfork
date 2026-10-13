@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RACE_EXCLUSIVES, mixedRoster, rosterFor } from '../roster';
+import { ROSTER, mixedRoster, rosterFor, starterUnits } from '../roster';
 import { BLOC_RACES, RACES, UNLOCKABLE_RACE, defaultSave, type CampaignSave, type RaceId } from '../save';
 import {
   BLOCS,
@@ -111,8 +111,8 @@ describe('battle setup (AC 4)', () => {
     const setup = battleSetup(initialOwners('race1'), BLOCS.race4.regions[0]!);
     expect(setup.defender).toEqual({ kind: 'race', race: 'race4' });
     expect(setup.units).toEqual(rosterFor('race4'));
-    expect(setup.units).toContain(RACE_EXCLUSIVES.race4);
-    for (const race of RACES) if (race !== 'race4') expect(setup.units).not.toContain(RACE_EXCLUSIVES[race]);
+    expect(setup.units).toContain(ROSTER.races.race4.exclusive);
+    for (const race of RACES) if (race !== 'race4') expect(setup.units).not.toContain(ROSTER.races[race].exclusive);
     expect(setup.statBonus).toBe(1);
   });
 

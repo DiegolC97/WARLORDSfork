@@ -20,16 +20,17 @@ Requires Node 20 or newer (CI uses Node 22).
 | --- | --- |
 | `npm ci` | Install dependencies from the lockfile |
 | `npm run dev` | Start the dev server (prints a local URL, usually http://localhost:5173) |
-| `npm run build` | Release build into `dist/` — runs the import-boundary check, the name check and typecheck first |
+| `npm run build` | Release build into `dist/` — runs the import-boundary check, the name check, the roster check and typecheck first |
 | `npm run preview` | Serve `dist/` locally |
 | `npm test` | Run the test suite headless (Vitest + jsdom) |
 | `npm run test:watch` | Tests in watch mode |
 | `npm run typecheck` | TypeScript only |
 | `npm run check:deps` | Import-boundary check only (dependency-cruiser) |
 | `npm run check:names` | Fails if a working name appears outside the naming file |
+| `npm run check:roster` | Fails if the roster definition is inconsistent (see [Roster](#roster)) |
 
-CI (`.github/workflows/ci.yml`) runs the boundary check, the name check,
-typecheck, tests and build on every push and pull request.
+CI (`.github/workflows/ci.yml`) runs the boundary check, the name check, the
+roster check, typecheck, tests and build on every push and pull request.
 
 ## Engine
 
@@ -45,15 +46,15 @@ src/main.ts             browser entry: creates the PlayCanvas host and boots the
 src/app.ts              composition root (save store → campaign → shell)
 src/engine/             EngineHost seam: playcanvasHost (real) and nullHost (headless tests)
 src/assets/loader.ts    manifest-driven asset loading (textures, atlases, json, audio, font)
-src/names/              display names: game title, race names, unit names, region names, original-game credit
+src/names/              display names: game title, race names, unit base names and per-race prefixes, region names, credit
 src/save/               the ONLY code that touches stored data (schema, migrations, saveStore)
 src/campaign/           the campaign map as data (regions, blocs, adjacency, palette) and its pure rules
-src/roster/             roster seam: which unit ids each race fields, and the contested mixed army
+src/roster/             THE roster definition (data.ts: 19 units, races, palettes, atlases), its resolvers and validator
 src/shell/routes.ts     navigation as data: screen id + event → next screen id
 src/shell/screenShell.ts  holds exactly one active screen, runs transitions
 src/screens/<id>/       one folder per screen; index.ts is its only public file
 src/ui/placeholder.ts   throwaway DOM helpers for placeholder screens
-public/assets/          static assets served at /assets/…
+public/assets/          static assets served at /assets/… (units/placeholder-units.* is the stand-in unit atlas)
 ```
 
 ## Screens and navigation
@@ -111,14 +112,15 @@ later campaigns. `race7` owns no bloc, so it starts from a host bloc
 The map draws an arrow from the player's territory to every region adjacent
 to a holding (`attackableRegions`); clicking one (or its "Attack …" button)
 writes `battleRegion` to the save and goes to battle. The battle screen reads
-it, fields the defending race's roster through `src/roster`, and on "Finish
+it, fields the defending race's army through `src/roster` (`rosterFor`), and on "Finish
 battle" applies `applyVictory` — the region recolours to the player's race
 and the arrows update when the map is shown again. When no attack is legal
 (the map is fully conquered) the map says so and offers "New campaign", which
 resets progress but keeps settings and the unlock. A `battleRegion` left
 pending is dropped when the map is reopened.
 
-Colours come from the Okabe–Ito palette (`src/campaign/palette.ts`);
+Colours are the races' roster palette tints (Okabe–Ito, defined in
+`src/roster/data.ts` and read by `src/campaign/palette.ts`);
 `palette.test.ts` simulates protanopia, deuteranopia and tritanopia and
 requires every pair of the six bloc colours and the contested colour to stay
 apart. Contested regions are also hatched and the player's holdings outlined,
@@ -133,24 +135,95 @@ A screen declares its assets as a manifest on its definition. The shell loads
 them before `enter()` and releases them on exit; `ctx.assets.get(id)` returns
 the loaded resource. Put files under `public/assets/`.
 
+## Roster
+
+`src/roster/data.ts` is the single definition of the six races and the
+nineteen units; every screen reads it through `src/roster` and no other file
+may carry a unit statistic. The numbers are the rules document's (§6.1 unit
+table, §7.2 walk cycles, §8.2 melee attacks, §8.4 projectiles, §9 upgrade
+tracks); unit ids are the document's indices 0–18, which is also what the
+save's `ownedUnits` holds.
+
+Each unit carries speed, hit points, recharge, range, cost, the shop's
+displayed max damage, its walk cycle, its upgrade track (`spear`, `sword`,
+`halberd`, `axe`, `archery` or none) and its attack set: per swipe the clip
+length, strike frames, reach, power per strike, whether the strikes scale
+with the track, and how the unit moves during the swipe; projectile swipes
+carry the projectile kind, speed and drift instead.
+
+Each race (`RACE_DEFINITIONS`) carries its exclusive unit or `null`, a
+palette id (resolved through `PALETTES` to the tint used for sprites and the
+map) and the atlas it draws its units from. Availability is pure data: a
+unit is **exclusive** to the race whose entry names it and **generic**
+otherwise. Thirteen units are generic (Axe Thrower, Ranger and Spearmaster
+among them) and six are exclusive, one per bloc race:
+
+| Race | Exclusive unit |
+| --- | --- |
+| `race1` | King's Guard (18) |
+| `race2` | Battle Axeman (9) |
+| `race3` | Whirler (10) |
+| `race4` | Giant Troll (16) |
+| `race5` | Flailer (17) |
+| `race6` | Javelin Thrower (13) |
+| `race7` | none — the generic pool only |
+
+Resolvers (`src/roster/roster.ts`), all taking an optional definition so
+tests can run them over a modified copy:
+
+- `unitStats(unit)` — the statistics, identical whichever race fields the unit;
+- `availableUnits(race)`, `isAvailable(unit, race)`, `exclusiveOf(unit)`, `genericUnits()`;
+- `starterUnits()` — the trio a new campaign army starts with (save defaults use it);
+- `rosterFor(race)` / `mixedRoster()` — a region's defenders and the contested host;
+- `twoPlayerArmy(race, rng)` — the two-player rule: trio plus two distinct random generics;
+- `unitDisplayName(unit, race)` — the per-race name (see below);
+- `shopPrice(unit)`, `killBounty(unit)` (= `ceil(cost / 50)`), `shopOffers(owned, race)`, `upgradeCost(track, level)`;
+- `raceVisuals(race)` — tint, atlas url and the frame for each unit, for the renderer.
+
+Per-race names keep the statistics identical while reading thematically: a
+generic unit is the race's prefix (`RACE_UNIT_PREFIX` in the naming file) on
+the shared base name, and a race's exclusive carries its own in-world name
+(`EXCLUSIVE_UNIT_NAMES`). All 19 × 6 combinations are distinct and tested.
+
+`npm run check:roster` (part of `npm run build` and CI) loads the
+definition through Vite and fails, naming the culprit, when an exclusive is
+owned by two races, a unit has no base name or a race no prefix or exclusive
+name, two units share a name within a race, a strike frame is at or beyond
+its clip length, a palette is unknown, or an atlas under `public/` is
+missing or lacks a frame for a unit the race fields.
+
+To add a race: append its id in `src/roster/races.ts`, add its entry to
+`RACE_DEFINITIONS` (exclusive or `null`, palette, atlas), and name it in
+`src/names/displayNames.ts` (`RACE_NAMES`, `RACE_UNIT_PREFIX`,
+`EXCLUSIVE_UNIT_NAMES`). A race with `exclusive: null` fields the full
+generic pool with no other change. To change a unit's cost, edit the one
+number in `data.ts`: the shop price and the kill bounty follow.
+
+Race art has not been delivered, so every race points at
+`public/assets/units/placeholder-units.json`, a 19-frame stand-in; the art
+slice points each race at its own atlas file.
+
 ## Display names
 
 `src/names/displayNames.ts` is the only place a user-visible name is spelled:
-the game title (as a two-line lockup), the six race names, the unit names, and
-the original game's title and author for the credits screen. Code, data and
+the game title (as a two-line lockup), the race names, each race's unit-name
+prefix, the unit base names, the in-world name of each race's exclusive, the
+region names, and the original game's title and author for the credits screen. Code, data and
 assets use internal identifiers instead:
 
-- race ids are `race1`…`race7` in roster order (`RACES` in `src/save/schema.ts`;
-  `race1`…`race6` hold territory, `race7` is unlocked by finishing a campaign);
-- unit ids are the numbers the save's `ownedUnits` holds (0–2 the shared starting
-  trio, 10+ each race's exclusive, see `src/roster`);
+- race ids are `race1`…`race7` in roster order (`RACES` in `src/roster/races.ts`,
+  re-exported by `src/save`; `race1`…`race6` hold territory, `race7` is unlocked by
+  finishing a campaign);
+- unit ids are the rules document's unit indices 0–18, the numbers the save's
+  `ownedUnits` holds (0–2 the starting trio; see [Roster](#roster));
 - region ids are `r01`…`r28` (`REGION_IDS` in `src/campaign/regions.ts`).
 
 They are opaque on purpose so a display rename never touches them. Renaming
 for release is one edit to the naming file. `npm run check:names` reads the
 names from that file and fails the build if any of them appears in `src/`,
 `public/` or `index.html` anywhere else. Use `raceName(id)` / `unitName(id)`
-to render a name.
+to render a name, and `unitDisplayName(unit, race)` from `src/roster` for the
+per-race form.
 
 ### Import boundaries (enforced in the build)
 
@@ -178,7 +251,7 @@ from the rules document (section 15) plus the rendering zoom:
 | `gold` | integer | `500` |
 | `lifetimeKills` | integer | `0` |
 | `chosenRace` | `race1`…`race7`, or `null` | `null` — the player picks before the first battle |
-| `ownedUnits` | integer[] | `[0, 1, 2]` |
+| `ownedUnits` | integer[] | the roster's starting trio, `[0, 1, 2]` |
 | `upgradeLevels` | `{ [upgradeId]: level }` | `{}` |
 | `regionOwners` | `{ [regionId]: 'player' \| raceId \| null }` | `{}` — filled when a race is picked; `null` is an untaken contested region |
 | `battleRegion` | region id or `null` (schema 3+) | `null` — the region under attack during a campaign battle |

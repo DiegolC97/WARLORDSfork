@@ -13,7 +13,7 @@ import {
   startingBloc,
   type RegionId,
 } from '../../campaign';
-import { RACE_EXCLUSIVES, mixedRoster, rosterFor } from '../../roster';
+import { ROSTER, mixedRoster, rosterFor, unitDisplayName } from '../../roster';
 import { MemoryStorage, RACES, SaveStore, UNLOCKABLE_RACE } from '../../save';
 
 let overlayRoot: HTMLElement;
@@ -110,9 +110,9 @@ describe('launching a battle (AC 3, AC 4)', () => {
     expect(battle.dataset.defender).toBe('race4');
     const units = battle.querySelector<HTMLElement>('[data-role="defending-units"]')!.dataset.units!.split(',').map(Number);
     expect(units).toEqual([...rosterFor('race4')]);
-    expect(units).toContain(RACE_EXCLUSIVES.race4);
-    expect(battle.textContent).toMatch(/Giant Troll/);
-    for (const race of RACES) if (race !== 'race4') expect(units).not.toContain(RACE_EXCLUSIVES[race]);
+    expect(units).toContain(ROSTER.races.race4.exclusive);
+    expect(battle.textContent).toContain(unitDisplayName(ROSTER.races.race4.exclusive!, 'race4'));
+    for (const race of RACES) if (race !== 'race4') expect(units).not.toContain(ROSTER.races[race].exclusive);
     expect(battle.querySelector('[data-role="stat-bonus"]')).toBeNull();
   });
 

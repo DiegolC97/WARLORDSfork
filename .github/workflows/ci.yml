@@ -18,6 +18,8 @@ jobs:
         run: npm run check:deps
       - name: Display names live only in the naming file
         run: npm run check:names
+      - name: Roster definition is consistent
+        run: npm run check:roster
       - name: Typecheck
         run: npm run typecheck
       - name: Tests (headless)

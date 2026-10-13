@@ -9,7 +9,7 @@
  * started (no race picked).
  */
 import { BLOC_RACES, UNLOCKABLE_RACE, type BlocRaceId, type CampaignSave, type RaceId } from '../save';
-import { mixedRoster, rosterFor } from '../roster';
+import { mixedRoster, rosterFor, starterUnits, type UnitId } from '../roster';
 import { BLOCS, CONTESTED, REGIONS, isContested, region, type RegionId } from './regions';
 
 export const PLAYER_OWNER = 'player';
@@ -88,8 +88,8 @@ export function defenderOf(owners: RegionOwners, id: RegionId): Defender {
 export interface BattleSetup {
   readonly region: RegionId;
   readonly defender: Defender;
-  /** Unit ids the defending army is drawn from (the roster seam). */
-  readonly units: readonly number[];
+  /** Unit ids the defending army is drawn from (the roster definition). */
+  readonly units: readonly UnitId[];
   /** Stat multiplier for the defenders; 1 for a race, `CONTESTED_STAT_BONUS` for a contested region. */
   readonly statBonus: number;
 }
@@ -148,7 +148,7 @@ export function newCampaignPatch(save: Readonly<CampaignSave>): CampaignPatch {
     battleRegion: null,
     campaignLevel: 1,
     gold: 500,
-    ownedUnits: [0, 1, 2],
+    ownedUnits: [...starterUnits()],
     upgradeLevels: {},
     raceUnlocked: save.raceUnlocked,
   };
