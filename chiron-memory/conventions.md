@@ -39,3 +39,7 @@ What: Campaign region names are in `REGION_NAMES` in src/names/displayNames.ts, 
 ## Campaign rules are pure functions in src/campaign; screens only render and call them
 
 What: Ownership, attackability, battle setup, victory and new-campaign logic are pure functions over the save in src/campaign/rules.ts; the map and battle screens call them and write the returned patch through ctx.campaign · Why: the 25-battle simulation and the adjacency rules can be tested without the DOM, and the battle slice can replace the placeholder screen without touching the rules · Where: src/campaign/rules.ts, src/screens/map/index.ts, src/screens/battle/index.ts
+
+## Screens render per-race unit names and prices only through src/roster
+
+What: Shop and battle placeholders call `unitDisplayName`, `shopPrice`, `killBounty`, `shopOffers`, `twoPlayerArmy` and `raceVisuals`; the shop buys by deducting `shopPrice` and appending to `ownedUnits`; `src/campaign/palette.ts` derives `RACE_COLOURS` from `raceVisuals(race).tint` · Why: the definition must be the only source of statistics, so a cost change moves shop price and bounty together and a palette change moves sprites and map together · Where: src/screens/shop/index.ts, src/screens/battle/index.ts, src/campaign/palette.ts, src/campaign/rules.ts (starterUnits)

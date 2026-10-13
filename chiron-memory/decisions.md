@@ -80,3 +80,19 @@ What: The map writes `battleRegion` to the save when the player attacks and the 
 ## Map colours are the Okabe–Ito palette, verified under three deficiency simulations
 
 What: Bloc fills use Okabe–Ito colours (race1 blue, race2 orange, race3 sky blue, race4 green, race5 reddish purple, race6 yellow, race7 vermilion) with light grey hatching for contested; a test simulates protanopia, deuteranopia and tritanopia (Machado 2009 matrices) and requires pairwise ΔE2000 ≥ 10 · Why: the acceptance criterion requires the six bloc colours plus contested to remain distinguishable under colour-blindness simulation; the closest pair sits at 10.9 · Where: src/campaign/palette.ts, src/campaign/palette.test.ts · Learned: keep a non-colour cue too (hatch, outline, glyph) so the palette is not the only channel
+
+## Unit ids are the rules document's unit indices 0–18
+
+What: Unit ids in code and in the save's `ownedUnits` are the original game's unit indices (0 Spearman … 18 King's Guard), replacing the earlier placeholder scheme of 10+ for exclusives · Why: the save already stored numeric ids with 0–2 as the starting trio, the rules document indexes every table by these numbers, and no shipped save could hold a placeholder exclusive id, so no migration was needed · Where: src/roster/data.ts (UNIT_IDS), src/names/displayNames.ts (UNIT_NAMES) · Learned: when adopting a reference document's numbering, check whether any persisted data already uses a conflicting scheme before deciding on a migration
+
+## Six exclusives, one per bloc race; race7 fields the generic pool only
+
+What: race1→King's Guard, race2→Battle Axeman, race3→Whirler, race4→Giant Troll, race5→Flailer, race6→Javelin Thrower; Axe Thrower, Ranger and Spearmaster are generic (13 generics); the unlockable race7 has `exclusive: null` · Why: the work order fixed the mapping and moved three former exclusives to the generic pool so six races cover nineteen units; a race with no exclusive demonstrates that a new race needs only a data entry · Where: src/roster/data.ts (RACE_DEFINITIONS) · Learned: the per-race upgrade modifiers of the original races were not mapped onto the new races and remain open for the shop/upgrades slice
+
+## Per-race unit names: prefix + base for generics, in-world name for the owner's exclusive
+
+What: `unitDisplayName(unit, race)` returns `RACE_UNIT_PREFIX[race] + ' ' + UNIT_NAMES[unit]` for generic units and for another race's exclusive, and `EXCLUSIVE_UNIT_NAMES[race]` (Reiksguard, Slayer, Swordmaster, Stone Troll, Chosen, Skink Skirmisher) when the race fields its own exclusive · Why: the same mechanical unit must read thematically for each race with identical statistics, and all 19 × 6 names must be distinct per race; the fallback form for a foreign exclusive keeps the contested mixed host nameable without inventing 36 names · Where: src/roster/roster.ts (unitDisplayName), src/names/displayNames.ts · Learned: tests must build the expected string from the prefix table rather than spelling it, or check-names fails on the race word
+
+## The roster check loads the TypeScript definition through Vite's ssrLoadModule
+
+What: `scripts/check-roster.mjs` creates a Vite dev server in middleware mode, calls `ssrLoadModule('/src/roster/index.ts')`, reads the referenced atlases from public/ and runs `validateRoster`; `check:roster` sits between check:names and typecheck in `npm run build` and CI · Why: Node cannot import the extensionless TypeScript sources directly and a parallel JSON copy of the data would be a second source of truth; Vite is already a dependency and resolves the same modules the game ships · Where: scripts/check-roster.mjs, package.json · Learned: pass `optimizeDeps: { noDiscovery: true }` and `server.watch: null` so the script exits cleanly
