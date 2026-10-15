@@ -38,3 +38,23 @@ What: A test file placed in the session scratchpad fails with "Cannot find modul
 ## Writing to the SaveStore behind the live CampaignAccess is overwritten on the next update
 
 What: In app-level tests, `app.store.write(...)` after the app has booted does not change what screens see: `createCampaignAccess` keeps its own current save and the next `update` writes that back over the store · Why: the campaign access is the in-memory truth and the store is write-through from it · Where: src/save/saveStore.ts (createCampaignAccess) · Learned: seed storage before `createApp`, or go through ctx.campaign.update
+
+## A screen's test file may not import another screen's index either
+
+**What:** `no-cross-screen-imports` applies to `src/screens/map/map.test.ts` importing `src/screens/battle/index.ts` just as it does to production code; the map test needed the battle's test hook to win a battle.
+**Why:** the rule matches on path, not on test/production.
+**Where:** `.dependency-cruiser.cjs`; the hook moved to `src/battle/handle.ts` (`battleHandle`, `attachBattleHandle`), outside any screen folder.
+**Learned:** 2026-10-15. Put shared test hooks in a seam module, never in a screen folder.
+
+## Full-length battles are cheap to simulate under jsdom
+
+**What:** Ticking the battle screen through all 7200 frames with DOM updates and a per-tick assertion takes about a second in Vitest/jsdom (`NullEngineHost.tick(1)` in a loop).
+**Why:** the reference simulation and the DOM reconciliation are small; snapshots are plain objects.
+**Where:** `src/screens/battle/battle.test.ts` ("across a full battle…").
+**Learned:** 2026-10-15. A seeded `Math.random` spy (`vi.spyOn(Math, 'random')`) makes screen-level battles replay exactly.
+
+## Chrome DevTools MCP sessions can leave stray key state on the page
+
+**What:** While eyeballing the battle in the chrome-devtools MCP page, a unit once spawned and the unit selection moved with no scripted key; a repeated run with a keydown logger showed no key and no spawn.
+**Why:** unknown, most likely a key event from the tooling reaching the page; not reproducible.
+**Learned:** 2026-10-15. When a browser check shows input-like behaviour, log `keydown` on `window` before trusting it as a code defect.

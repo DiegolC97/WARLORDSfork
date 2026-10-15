@@ -96,3 +96,31 @@ What: `unitDisplayName(unit, race)` returns `RACE_UNIT_PREFIX[race] + ' ' + UNIT
 ## The roster check loads the TypeScript definition through Vite's ssrLoadModule
 
 What: `scripts/check-roster.mjs` creates a Vite dev server in middleware mode, calls `ssrLoadModule('/src/roster/index.ts')`, reads the referenced atlases from public/ and runs `validateRoster`; `check:roster` sits between check:names and typecheck in `npm run build` and CI · Why: Node cannot import the extensionless TypeScript sources directly and a parallel JSON copy of the data would be a second source of truth; Vite is already a dependency and resolves the same modules the game ships · Where: scripts/check-roster.mjs, package.json · Learned: pass `optimizeDeps: { noDiscovery: true }` and `server.watch: null` so the script exits cleanly
+
+## Battle lane keys wrap 8 → 1; the rules document clamps
+
+**What:** A human lane key cycles the arrow 1…8 and wraps in both directions; the computer opponent still clamps as in §13.
+**Why:** the battle-screen work order's acceptance criterion asks for wrap, overriding §3 of the rules document ("lane selection clamps at 1 and 8").
+**Where:** `ReferenceBattle.command` in `src/battle/simulation.ts`.
+**Learned:** 2026-10-15.
+
+## The battle result reaches the result screen through the save (`lastBattle`, schema 4)
+
+**What:** When a winner is decided the battle screen writes `lastBattle` (`winner`, `leftScore`, `rightScore`, `mode`) plus, in a campaign, the earned gold and kills and the region on a victory, then navigates `finished`; the result screen reads `lastBattle`. Migration 3 → 4 sets it to `null`.
+**Why:** screens share state only through the save (the pattern `battleRegion` set); a transient channel in the shell would have been a second mechanism.
+**Where:** `src/save/schema.ts`, `src/save/migrations.ts`, `src/screens/battle/index.ts`, `src/screens/result/index.ts`.
+**Learned:** 2026-10-15.
+
+## Team identity on the battlefield is an accent layer of shape and value, never the race colour
+
+**What:** Every unit sprite carries the race tint for its body and a pennant above it: white and flying right for the left side, black and flying left for the right side (plus a matching base shadow). Same-race battles — the player's own holdout in a campaign — are told apart by the pennant alone.
+**Why:** the work order requires legibility with the same race on both sides, and the project already keeps a non-colour cue everywhere (map hatching, outlines).
+**Where:** `src/screens/battle/units.ts`, CSS `.battle .unit.left/.right .pennant` in `index.html`.
+**Learned:** 2026-10-15.
+
+## The battle screen is a DOM/SVG stage of 700 × 500 scaled by the saved zoom
+
+**What:** The screen builds a `.stage` of the original's 700 × 500 pixels (backdrop SVG, HUD, field, racks, footer) and applies `transform: scale(zoom)`; field units map onto the field band through `fieldX` / `laneY` in `layout.ts`. The spawner rack lays 1–8 buttons out with `rackGrid` (at most four per row, equal widths, last row centred); portraits are the race atlas frame blended over the race tint with a two-letter initial while the atlas is the pixel placeholder.
+**Why:** the menu and map are DOM already and the headless tests need a DOM; the engine root is still scaled so an engine-rendered field can be dropped in later.
+**Where:** `src/screens/battle/layout.ts`, `backdrop.ts`, `hud.ts`, `rack.ts`, `input.ts`, `units.ts`, `index.ts`.
+**Learned:** 2026-10-15.
