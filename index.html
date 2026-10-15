@@ -61,6 +61,94 @@
         .menu .entries { top: 220px; }
         .menu .entries button { font-size: 30px; }
       }
+
+      /* Battle — the original's 700×500 stage, scaled by the saved zoom */
+      .screen.battle { display: block; background: #1a1612; overflow: hidden; }
+      .battle .viewport { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+      .battle .stage { position: relative; overflow: hidden; transform-origin: center center; background: #2b2622; user-select: none; font-family: system-ui, sans-serif; color: #f3ecd8; }
+      .battle .backdrop { position: absolute; inset: 0; }
+      /* HUD band */
+      .battle .hud { position: absolute; left: 0; top: 0; width: 700px; height: 46px; }
+      .battle .hud::before { content: ''; position: absolute; left: 0; right: 0; top: 14px; height: 32px; background: linear-gradient(rgba(10, 8, 6, 0.55), rgba(10, 8, 6, 0)); pointer-events: none; }
+      .battle .territory { position: absolute; left: 0; top: 0; width: 700px; height: 14px; background: #7a1f1f; box-shadow: inset 0 0 0 1px #000; }
+      .battle .territory .fill { position: absolute; left: 0; top: 0; height: 100%; background: #1f4f8a; }
+      .battle .territory .centre { position: absolute; left: 349px; top: 0; width: 2px; height: 100%; background: #f3ecd8; }
+      .battle .territory.full .fill { background: #4f9cff; }
+      .battle .territory.empty { background: #ff5a3c; }
+      .battle .territory .score { position: absolute; top: -1px; font-size: 11px; font-weight: 700; line-height: 14px; text-shadow: 0 0 2px #000, 0 0 2px #000; }
+      .battle .territory .score.left { left: 6px; }
+      .battle .territory .score.right { right: 6px; }
+      .battle .dial { position: absolute; left: 330px; top: 15px; width: 40px; height: 40px; z-index: 3; }
+      .battle .dial svg { display: block; }
+      .battle .dial .seconds { position: absolute; left: 0; right: 0; top: 23px; text-align: center; font-size: 10px; font-weight: 700; color: #2b2622; }
+      .battle .dial.zero .seconds { color: #c0392b; }
+      .battle .charge { position: absolute; top: 18px; width: 150px; height: 24px; display: flex; align-items: center; gap: 4px; font-size: 10px; }
+      .battle .charge.left { left: 8px; }
+      .battle .charge.right { right: 8px; flex-direction: row-reverse; }
+      .battle .charge .track { width: 72px; height: 10px; background: #111; border: 1px solid #f3ecd8; }
+      .battle .charge .fill { height: 100%; background: #d4a017; transition: width 120ms linear; }
+      .battle .charge.armed .fill { background: #ff3b30; }
+      .battle .charge .label { min-width: 30px; text-align: center; }
+      .battle .charge .release { font-size: 10px; padding: 1px 6px; cursor: pointer; }
+      .battle .charge.armed .release { background: #ff3b30; color: #fff; border-color: #fff; animation: pulse 0.8s ease-in-out infinite alternate; }
+      @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+      /* Field */
+      .battle .field { position: absolute; left: 0; top: 0; width: 700px; height: 500px; pointer-events: none; }
+      .battle .lane-arrow { position: absolute; width: 22px; height: 22px; line-height: 22px; text-align: center; font-size: 16px; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; transition: top 80ms linear; }
+      .battle .lane-arrow.left { left: 2px; }
+      .battle .lane-arrow.right { right: 2px; }
+      .battle .units { position: absolute; inset: 0; }
+      .battle .unit { position: absolute; width: 16px; height: 24px; margin-left: -8px; margin-top: -24px; }
+      .battle .unit .body { position: absolute; left: 2px; bottom: 0; width: 12px; height: 18px; background: var(--tint); border: 1px solid #000; border-radius: 3px 3px 1px 1px; }
+      .battle .unit .pennant { position: absolute; left: 7px; top: -6px; width: 2px; height: 12px; background: #000; }
+      .battle .unit .pennant::after { content: ''; position: absolute; top: 0; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
+      /* Team accent layer: left = white pennant flying right, right = black pennant flying left — shape and value, not hue. */
+      .battle .unit.left .pennant { background: #fff; }
+      .battle .unit.left .pennant::after { left: 2px; border-left: 7px solid #fff; }
+      .battle .unit.right .pennant { background: #000; }
+      .battle .unit.right .pennant::after { right: 2px; border-right: 7px solid #000; }
+      .battle .unit.left .body { box-shadow: 0 2px 0 0 #fff; }
+      .battle .unit.right .body { box-shadow: 0 2px 0 0 #000; }
+      .battle .unit .hp { position: absolute; left: 1px; bottom: -4px; height: 2px; background: #2ecc71; max-width: 14px; }
+      .battle .unit.flipped .body { border-radius: 3px 3px 1px 1px; }
+      .battle .unit.attacking .body { transform: translateX(2px) skewX(-8deg); }
+      .battle .unit.flipped.attacking .body { transform: translateX(-2px) skewX(8deg); }
+      .battle .unit.dead { opacity: 0.55; }
+      .battle .unit.dead .body { transform: rotate(80deg) translateY(6px); }
+      .battle .unit.dead .pennant, .battle .unit.dead .hp { display: none; }
+      .battle .unit.retreating { opacity: 0.8; }
+      .battle .projectile { position: absolute; width: 8px; height: 2px; background: #f3ecd8; margin-left: -4px; }
+      .battle .projectile.magic { background: #b26cff; width: 6px; height: 6px; border-radius: 50%; }
+      .battle .projectile.axe { background: #bbb; width: 5px; height: 5px; }
+      /* Spawner racks */
+      .battle .racks { position: absolute; left: 0; top: 364px; width: 700px; height: 100px; display: flex; justify-content: space-between; padding: 0 6px; box-sizing: border-box; }
+      .battle .rack { width: 342px; display: flex; flex-direction: column; gap: 2px; }
+      .battle .rack-header { height: 14px; font-size: 11px; line-height: 14px; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+      .battle .rack.right .rack-header { justify-content: flex-end; }
+      .battle .rack-header .selected-name { font-weight: 700; color: #ffd966; overflow: hidden; text-overflow: ellipsis; }
+      .battle .rack-header .stat-bonus { color: #ff8c69; font-weight: 700; }
+      .battle .rack .buttons { display: flex; flex-wrap: wrap; gap: var(--rack-gap, 4px); justify-content: center; align-content: flex-start; }
+      .battle .rack.left .buttons { justify-content: flex-start; }
+      .battle .rack.right .buttons { justify-content: flex-end; }
+      .battle .spawner { position: relative; display: flex; align-items: center; gap: 3px; padding: 2px; box-sizing: border-box; overflow: hidden; background: #3a332d; color: #f3ecd8; border: 1px solid #6b5f52; border-radius: 3px; font-size: 9px; line-height: 10px; letter-spacing: -0.2px; text-align: left; cursor: pointer; }
+      .battle .spawner .portrait { position: relative; flex: 0 0 auto; width: 18px; height: 18px; border: 1px solid #000; border-radius: 2px; overflow: hidden; }
+      .battle .spawner .portrait .sprite { position: absolute; inset: 0; image-rendering: pixelated; background-repeat: no-repeat; mix-blend-mode: luminosity; }
+      .battle .spawner .portrait .initial { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000; }
+      .battle .spawner .name { flex: 1 1 auto; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow-wrap: break-word; hyphens: manual; }
+      .battle .spawner .recharge { position: absolute; left: 0; right: 0; top: 0; background: rgba(0, 0, 0, 0.55); pointer-events: none; transition: height 60ms linear; }
+      .battle .spawner.ready { border-color: #ff3b30; }
+      .battle .spawner.selected { outline: 2px solid #ffd966; outline-offset: -2px; }
+      .battle .rack[data-control="ai"] .spawner { cursor: default; }
+      /* Footer */
+      .battle .footer { position: absolute; left: 0; top: 466px; width: 700px; height: 34px; display: flex; align-items: center; gap: 10px; padding: 0 8px; box-sizing: border-box; font-size: 11px; }
+      .battle .footer .level { font-weight: 700; color: #ffd966; }
+      .battle .footer .matchup { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
+      .battle .footer .controls { display: flex; gap: 4px; }
+      .battle .footer button { font-size: 11px; padding: 3px 8px; }
+      /* Result panel */
+      .battle .result-panel { position: absolute; left: 200px; top: 150px; width: 300px; padding: 16px; box-sizing: border-box; background: rgba(20, 16, 12, 0.92); border: 2px solid #f3ecd8; text-align: center; z-index: 5; }
+      .battle .result-panel h2 { margin: 0 0 6px; font-size: 24px; }
+      .battle .result-panel p { margin: 0 0 10px; font-size: 18px; }
     </style>
   </head>
   <body>

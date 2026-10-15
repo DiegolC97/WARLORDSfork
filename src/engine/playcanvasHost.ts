@@ -60,5 +60,10 @@ export function createPlayCanvasHost(canvas: HTMLCanvasElement): EngineHost {
     setClearColor(r, g, b) {
       if (camera.camera) camera.camera.clearColor = new pc.Color(r, g, b);
     },
+    onFrame(cb) {
+      const handler = (dt: number) => cb(dt);
+      app.on('update', handler);
+      return () => app.off('update', handler);
+    },
   };
 }

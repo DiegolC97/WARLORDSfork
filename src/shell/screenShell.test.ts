@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp, type App } from '../app';
 import { NullEngineHost } from '../engine/nullHost';
 import { MemoryStorage, SaveStore } from '../save';
+import { battleHandle } from '../battle';
 import { HOME_SCREEN, ROUTES, SCREEN_IDS, pathBetween, type ScreenId } from './routes';
 
 let host: NullEngineHost;
@@ -101,6 +102,8 @@ describe('ScreenShell', () => {
     await click('retreat');
     assertExactlyOneActive('map');
     await click('attack:r12');
+    battleHandle(overlayRoot.firstElementChild as HTMLElement)!.simulation.surrender('right');
+    host.tick(1);
     await click('finished');
     assertExactlyOneActive('result');
     await click('continue');
@@ -109,6 +112,8 @@ describe('ScreenShell', () => {
     assertExactlyOneActive('menu');
     await click('twoPlayer');
     assertExactlyOneActive('battle');
+    battleHandle(overlayRoot.firstElementChild as HTMLElement)!.simulation.surrender('left');
+    host.tick(1);
     await click('finished');
     await click('menu');
     assertExactlyOneActive('menu');
@@ -167,5 +172,20 @@ describe('save reload through the application (AC 5)', () => {
     expect(second.store.load().outcome).toBe('loaded');
     expect(second.store.load().save.chosenRace).toBe('race2');
     expect(overlayRoot.textContent).toMatch(/Save: loaded/);
+  });
+});
+
+describe('frame clock', () => {
+  it('the headless host delivers ticks to subscribers until they unsubscribe', async () => {
+    await app.shell.navigate('ready');
+    expect(host.frameListeners).toBe(0);
+    let frames = 0;
+    const off = host.onFrame(() => frames++);
+    host.tick(3);
+    expect(frames).toBe(3);
+    off();
+    host.tick(1);
+    expect(frames).toBe(3);
+    expect(host.frameListeners).toBe(0);
   });
 });

@@ -16,4 +16,11 @@ export interface EngineHost {
   createSceneRoot(name: string): pc.Entity | null;
   /** Placeholder visual per screen while there is no art. */
   setClearColor(r: number, g: number, b: number): void;
+  /**
+   * Call `cb` once per rendered frame with the elapsed seconds. Returns the
+   * unsubscribe function; the shell unsubscribes a screen's callbacks on exit.
+   */
+  onFrame(cb: FrameCallback): () => void;
 }
+
+export type FrameCallback = (dtSeconds: number) => void;

@@ -47,7 +47,8 @@ describe('options', () => {
     await click('twoPlayer');
     expect(app.shell.activeScreenId).toBe('battle');
     expect(overlayRoot.querySelector('[data-screen="battle"]')!.getAttribute('data-zoom')).toBe('1.25');
-    expect(overlayRoot.textContent).toMatch(/zoom ×1\.25/);
+    const stage = overlayRoot.querySelector<HTMLElement>('[data-role="stage"]')!;
+    expect(stage.style.transform).toBe('scale(1.25)');
   });
 
   it('the battle screen scales its scene root by the zoom', async () => {

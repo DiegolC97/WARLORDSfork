@@ -12,6 +12,24 @@ export const resultScreen: ScreenDefinition = {
       ctx.setClearColor(0.1, 0.1, 0.04);
       heading(ctx.overlay, 'Battle result');
       const save = ctx.campaign.read();
+      const last = save.lastBattle;
+      if (last) {
+        const outcome = note(ctx.overlay, '');
+        outcome.dataset.role = 'outcome';
+        outcome.dataset.winner = last.winner;
+        outcome.dataset.leftScore = String(last.leftScore);
+        outcome.dataset.rightScore = String(last.rightScore);
+        outcome.dataset.mode = last.mode;
+        const title =
+          last.mode === 'campaign'
+            ? last.winner === 'left'
+              ? 'Victory'
+              : 'Defeat'
+            : last.winner === 'left'
+              ? 'Left player wins'
+              : 'Right player wins';
+        outcome.textContent = `${title} · ${last.leftScore} – ${last.rightScore}`;
+      }
       if (campaignStarted(save.regionOwners)) {
         const progress = note(ctx.overlay, `Campaign: ${battlesWon(save.regionOwners)} of 25 battles won`);
         progress.dataset.role = 'progress';

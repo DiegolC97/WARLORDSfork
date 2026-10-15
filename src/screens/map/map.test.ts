@@ -15,15 +15,18 @@ import {
 } from '../../campaign';
 import { ROSTER, mixedRoster, rosterFor, unitDisplayName } from '../../roster';
 import { MemoryStorage, RACES, SaveStore, UNLOCKABLE_RACE } from '../../save';
+import { battleHandle } from '../../battle';
 
 let overlayRoot: HTMLElement;
 let storage: MemoryStorage;
 let app: App;
+let host: NullEngineHost;
 
 const boot = async () => {
   document.body.innerHTML = '<div id="ui"></div>';
   overlayRoot = document.getElementById('ui')!;
-  app = await createApp({ host: new NullEngineHost(), overlayRoot, storage });
+  host = new NullEngineHost();
+  app = await createApp({ host, overlayRoot, storage });
   await app.shell.navigate('ready');
 };
 
@@ -39,6 +42,11 @@ const regionNode = (id: RegionId) => overlayRoot.querySelector<SVGGElement>(`[da
 const arrowTargets = () => [...overlayRoot.querySelectorAll<SVGLineElement>('[data-arrow-to]')].map((a) => a.dataset.arrowTo as RegionId).sort();
 const attackableNodes = () => [...overlayRoot.querySelectorAll<SVGGElement>('[data-region][data-attackable]')].map((g) => g.dataset.region!).sort();
 const saved = () => new SaveStore({ storage }).load().save;
+const winBattle = async () => {
+  const battle = overlayRoot.querySelector<HTMLElement>('[data-screen="battle"]')!;
+  battleHandle(battle)!.simulation.surrender('right');
+  host.tick(1);
+};
 
 beforeEach(async () => {
   storage = new MemoryStorage();
@@ -82,9 +90,11 @@ describe('attack arrows (AC 3)', () => {
 });
 
 /** From the map, attack `target`, win, and come back to the map. */
+/** Win the battle for `target`: the defending side surrenders, the result panel appears, continue. */
 const conquer = async (target: RegionId) => {
   await click(`attack:${target}`);
   expect(app.shell.activeScreenId).toBe('battle');
+  await winBattle();
   await click('finished');
   expect(app.shell.activeScreenId).toBe('result');
   await click('continue');
@@ -108,7 +118,7 @@ describe('launching a battle (AC 3, AC 4)', () => {
     const battle = overlayRoot.querySelector<HTMLElement>('[data-screen="battle"]')!;
     expect(battle.dataset.region).toBe(target);
     expect(battle.dataset.defender).toBe('race4');
-    const units = battle.querySelector<HTMLElement>('[data-role="defending-units"]')!.dataset.units!.split(',').map(Number);
+    const units = battle.querySelector<HTMLElement>('[data-role="rack-right"]')!.dataset.units!.split(',').map(Number);
     expect(units).toEqual([...rosterFor('race4')]);
     expect(units).toContain(ROSTER.races.race4.exclusive);
     expect(battle.textContent).toContain(unitDisplayName(ROSTER.races.race4.exclusive!, 'race4'));
@@ -135,7 +145,7 @@ describe('launching a battle (AC 3, AC 4)', () => {
     await click(`attack:${target}`);
     const battle = overlayRoot.querySelector<HTMLElement>('[data-screen="battle"]')!;
     expect(battle.dataset.defender).toBe('contested');
-    const units = battle.querySelector<HTMLElement>('[data-role="defending-units"]')!.dataset.units!.split(',').map(Number);
+    const units = battle.querySelector<HTMLElement>('[data-role="rack-right"]')!.dataset.units!.split(',').map(Number);
     expect(units).toEqual([...mixedRoster()]);
     expect(battle.querySelector<HTMLElement>('[data-role="stat-bonus"]')!.dataset.bonus).toBe(String(CONTESTED_STAT_BONUS));
   });
@@ -155,6 +165,7 @@ describe('launching a battle (AC 3, AC 4)', () => {
     await click('twoPlayer');
     const battle = overlayRoot.querySelector<HTMLElement>('[data-screen="battle"]')!;
     expect(battle.dataset.region).toBeUndefined();
+    await winBattle();
     await click('finished');
     expect(saved().regionOwners).toEqual({});
   });

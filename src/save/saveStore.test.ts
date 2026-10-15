@@ -45,6 +45,7 @@ const fullCampaign = (): CampaignSave => ({
   upgradeLevels: { attack: 2, defence: 1, speed: 0 },
   regionOwners: { r1: 'race2', r2: 'race4', r3: null },
   battleRegion: 'r2',
+  lastBattle: { winner: 'left', leftScore: 12, rightScore: 3, mode: 'campaign' },
 });
 
 describe('SaveStore — defaults (AC 4)', () => {
@@ -144,13 +145,13 @@ describe('SaveStore — damaged saves (AC 6)', () => {
 });
 
 describe('SaveStore — migration path (AC 7)', () => {
-  /** A save exactly as the version-1 build wrote it (no `zoom`, no `battleRegion`). */
+  /** A save exactly as the version-1 build wrote it (no `zoom`, no `battleRegion`, no `lastBattle`). */
   const v1Save = (): Record<string, unknown> => {
-    const { zoom: _zoom, battleRegion: _battleRegion, ...rest } = fullCampaign();
+    const { zoom: _zoom, battleRegion: _battleRegion, lastBattle: _lastBattle, ...rest } = fullCampaign();
     return { ...rest, schemaVersion: 1 };
   };
 
-  it('a version-1 save loads on the current build through the production chain (1 → 2 adds zoom, 2 → 3 adds battleRegion)', () => {
+  it('a version-1 save loads on the current build through the production chain (1 → 2 adds zoom, 2 → 3 adds battleRegion, 3 → 4 adds lastBattle)', () => {
     const storage = new MemoryStorage();
     storage.setItem(SAVE_KEY, JSON.stringify(v1Save()));
     const { save, outcome } = new SaveStore({ storage }).load();
@@ -158,6 +159,7 @@ describe('SaveStore — migration path (AC 7)', () => {
     expect(save.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
     expect(save.zoom).toBe(1);
     expect(save.battleRegion).toBeNull();
+    expect(save.lastBattle).toBeNull();
     for (const field of RULES_FIELDS) {
       if (field === 'zoom') continue;
       expect(save[field], `field ${field}`).toEqual(fullCampaign()[field]);
@@ -167,12 +169,29 @@ describe('SaveStore — migration path (AC 7)', () => {
 
   it('a version-2 save (no battleRegion) loads with battleRegion null', () => {
     const storage = new MemoryStorage();
-    const { battleRegion: _battleRegion, ...v2 } = fullCampaign();
+    const { battleRegion: _battleRegion, lastBattle: _lastBattle, ...v2 } = fullCampaign();
     storage.setItem(SAVE_KEY, JSON.stringify({ ...v2, schemaVersion: 2 }));
     const { save, outcome } = new SaveStore({ storage }).load();
     expect(outcome).toBe('migrated');
     expect(save.battleRegion).toBeNull();
+    expect(save.lastBattle).toBeNull();
     expect(save.regionOwners).toEqual(fullCampaign().regionOwners);
+  });
+
+  it('a version-3 save (no lastBattle) loads with lastBattle null and keeps its battleRegion', () => {
+    const storage = new MemoryStorage();
+    const { lastBattle: _lastBattle, ...v3 } = fullCampaign();
+    storage.setItem(SAVE_KEY, JSON.stringify({ ...v3, schemaVersion: 3 }));
+    const { save, outcome } = new SaveStore({ storage }).load();
+    expect(outcome).toBe('migrated');
+    expect(save.lastBattle).toBeNull();
+    expect(save.battleRegion).toBe('r2');
+  });
+
+  it('a malformed lastBattle is rejected as invalid', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(SAVE_KEY, JSON.stringify({ ...fullCampaign(), lastBattle: { winner: 'up', leftScore: 1, rightScore: 0, mode: 'campaign' } }));
+    expect(new SaveStore({ storage }).load().outcome).toBe('invalid');
   });
 
   it('a version-1 save survives a later schema change through the migration chain', () => {

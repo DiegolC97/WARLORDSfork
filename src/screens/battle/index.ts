@@ -1,117 +1,340 @@
 import { applyVictory, battleSetup, isRegionId, type BattleSetup } from '../../campaign';
-import { CONTESTED_LABEL, raceName, regionName, unitName } from '../../names';
-import { BLOC_RACES, isUnitId, killBounty, raceVisuals, twoPlayerArmy, unitDisplayName, type UnitId } from '../../roster';
-import type { RaceId } from '../../save';
-import type { ScreenDefinition } from '../../shell/screen';
-import { button, heading, note, row } from '../../ui/placeholder';
+import {
+  FRAMES_PER_SECOND,
+  RESULT_AUTO_CONTINUE_FRAMES,
+  attachBattleHandle,
+  createBattle,
+  type BattleSimulation,
+  type FrameState,
+  type Side,
+  type SideSetup,
+  type SpawnerCommand,
+} from '../../battle';
+import { CONTESTED_LABEL, raceName, regionName } from '../../names';
+import {
+  BLOC_RACES,
+  isUnitId,
+  raceVisuals,
+  referencedAtlases,
+  starterUnits,
+  twoPlayerArmy,
+  type RaceId,
+  type UpgradeTrack,
+} from '../../roster';
+import type { BattleResult, CampaignSave } from '../../save';
+import type { ScreenContext, ScreenDefinition } from '../../shell/screen';
+import { buildBackdrop } from './backdrop';
+import { buildHud } from './hud';
+import { bindBattleInput } from './input';
+import { STAGE_HEIGHT, STAGE_WIDTH, laneY } from './layout';
+import { buildRack, type AtlasJson } from './rack';
+import { buildUnitLayer } from './units';
 
 /**
- * Battle placeholder. Applies the saved rendering zoom to its scene root so
- * the battle slice inherits the setting: everything it parents under
- * `ctx.root` is scaled by `campaign.zoom`.
+ * The battle screen. It renders the simulation's frame snapshot — scores,
+ * territory bar, timer, both spawners and every unit — on the original's
+ * 700 × 500 stage scaled by the saved zoom, and sends spawner commands back
+ * from the keyboard and the rack. It holds no rule: what a unit costs to
+ * release, when a side wins and what a kill is worth all come out of the
+ * snapshot. On a decided winner it writes the outcome to the save (the
+ * region on a campaign victory) and hands over to the result screen.
  *
- * In a campaign the save's `battleRegion` names the region under attack; the
- * defenders come from the campaign rules (that region's race and its roster,
- * or the contested mixed host with its stat bonus). "Finish battle" stands
- * in for a victory and hands the region to the player. With no
- * `battleRegion` (the two-player entry) each side receives the roster's
- * two-player army: the starting trio plus two random generic units.
- *
- * Every unit name, bounty and visual on this screen is resolved through the
- * roster definition; nothing here knows a statistic.
+ * In a campaign the save's `battleRegion` names the region under attack and
+ * the computer drives the right spawner; with no `battleRegion` (the
+ * two-player entry) both spawners are human and share the keyboard.
  */
+
+const FRAME_SECONDS = 1 / FRAMES_PER_SECOND;
+/** Never simulate more than this much wall-clock time per rendered frame (tab was hidden). */
+const MAX_CATCH_UP_SECONDS = 0.25;
+
 export const battleScreen: ScreenDefinition = {
   id: 'battle',
-  assets: [],
-  create: () => ({
-    enter(ctx) {
-      const save = ctx.campaign.read();
-      const { zoom, chosenRace } = save;
-      ctx.root?.setLocalScale(zoom, zoom, zoom);
-      ctx.overlay.dataset.zoom = String(zoom);
-
-      ctx.setClearColor(0.12, 0.05, 0.05);
-      heading(ctx.overlay, 'Battle');
-
-      const target = save.battleRegion;
-      const setup: BattleSetup | null = target !== null && isRegionId(target) ? battleSetup(save.regionOwners, target) : null;
-
-      if (setup) {
-        note(ctx.overlay, `Fighting as ${raceName(chosenRace)} · zoom ×${zoom}`);
-        ctx.overlay.dataset.region = setup.region;
-        ctx.overlay.dataset.defender = setup.defender.kind === 'race' ? setup.defender.race : 'contested';
-        const defenderRace = setup.defender.kind === 'race' ? setup.defender.race : null;
-        const defenderName = defenderRace ? raceName(defenderRace) : `${CONTESTED_LABEL} host`;
-        const attacking = note(ctx.overlay, `Attacking ${regionName(setup.region)} · defended by ${defenderName}`);
-        attacking.dataset.role = 'defender';
-        const units = note(ctx.overlay, `Defending units: ${setup.units.map((u) => describe(u, defenderRace)).join(', ')}`);
-        units.dataset.role = 'defending-units';
-        units.dataset.units = setup.units.join(',');
-        if (defenderRace) {
-          const visuals = raceVisuals(defenderRace);
-          units.dataset.atlas = visuals.atlas;
-          units.dataset.tint = visuals.tint;
-        }
-        if (setup.statBonus !== 1) {
-          const bonus = note(ctx.overlay, `Defender stats ×${setup.statBonus}`);
-          bonus.dataset.role = 'stat-bonus';
-          bonus.dataset.bonus = String(setup.statBonus);
-        }
-        const own = save.ownedUnits.filter(isUnitId);
-        const army = note(ctx.overlay, `Your army: ${own.map((u) => describe(u, chosenRace)).join(', ')}`);
-        army.dataset.role = 'army';
-        army.dataset.units = own.join(',');
-        if (chosenRace) {
-          const visuals = raceVisuals(chosenRace);
-          army.dataset.atlas = visuals.atlas;
-          army.dataset.tint = visuals.tint;
-        }
-      } else {
-        // Two-player skirmish: no setup screen yet, so the left side plays the
-        // saved race (or the first bloc race) and the right a random bloc race.
-        const left: RaceId = chosenRace ?? BLOC_RACES[0];
-        const right: RaceId = BLOC_RACES[Math.floor(Math.random() * BLOC_RACES.length)] ?? BLOC_RACES[0];
-        ctx.overlay.dataset.mode = 'two-player';
-        note(ctx.overlay, `Two-player battle · zoom ×${zoom}`);
-        for (const [side, race] of [['left', left], ['right', right]] as const) {
-          const army = twoPlayerArmy(race);
-          const line = note(ctx.overlay, `${side === 'left' ? 'Left' : 'Right'} (${raceName(race)}): ${army.map((u) => describe(u, race)).join(', ')}`);
-          line.dataset.role = `two-player-${side}`;
-          line.dataset.race = race;
-          line.dataset.units = army.join(',');
-          const visuals = raceVisuals(race);
-          line.dataset.atlas = visuals.atlas;
-          line.dataset.tint = visuals.tint;
-        }
-      }
-
-      const r = row(ctx.overlay);
-      button(
-        r,
-        'Finish battle',
-        () => {
-          if (setup) {
-            const patch = applyVictory(ctx.campaign.read(), setup.region);
-            ctx.campaign.update(patch ?? { battleRegion: null });
-          }
-          void ctx.navigate('finished');
-        },
-        { action: 'finished' },
-      );
-      button(
-        r,
-        'Retreat',
-        () => {
-          if (setup) ctx.campaign.update({ battleRegion: null });
-          void ctx.navigate('retreat');
-        },
-        { action: 'retreat' },
-      );
-    },
-  }),
+  assets: referencedAtlases().map((url) => ({ id: `atlas:${url}`, type: 'json' as const, url })),
+  create: () => {
+    let dispose: () => void = () => {};
+    return {
+      enter(ctx) {
+        dispose = mountBattle(ctx);
+      },
+      exit() {
+        dispose();
+      },
+    };
+  },
 };
 
-/** "<name> (bounty N)": the name the fielding race gives the unit, or the base name for the mixed host. */
-function describe(unit: UnitId, race: RaceId | null): string {
-  return `${race ? unitDisplayName(unit, race) : unitName(unit)} (bounty ${killBounty(unit)})`;
+function mountBattle(ctx: ScreenContext): () => void {
+  const save = ctx.campaign.read();
+  const { zoom } = save;
+  ctx.root?.setLocalScale(zoom, zoom, zoom);
+  ctx.setClearColor(0.12, 0.05, 0.05);
+  const overlay = ctx.overlay;
+  overlay.classList.add('battle');
+  overlay.dataset.zoom = String(zoom);
+
+  // ---- who fights
+  const target = save.battleRegion;
+  const setup: BattleSetup | null = target !== null && isRegionId(target) ? battleSetup(save.regionOwners, target) : null;
+  const mode: BattleResult['mode'] = setup ? 'campaign' : 'two-player';
+  const leftRace: RaceId = save.chosenRace ?? BLOC_RACES[0];
+  const ownedArmy = save.ownedUnits.filter(isUnitId);
+  const left: SideSetup = {
+    race: leftRace,
+    army: setup ? (ownedArmy.length > 0 ? ownedArmy : [...starterUnits()]) : twoPlayerArmy(leftRace),
+    control: 'human',
+    upgrades: save.upgradeLevels as Partial<Record<UpgradeTrack, number>>,
+    autoSend: save.autoSendOn,
+  };
+  const rightRace: RaceId | null = setup
+    ? setup.defender.kind === 'race'
+      ? setup.defender.race
+      : null
+    : (BLOC_RACES[Math.floor(Math.random() * BLOC_RACES.length)] ?? BLOC_RACES[0]);
+  const right: SideSetup = setup
+    ? { race: rightRace, army: setup.units, control: 'ai', statBonus: setup.statBonus }
+    : { race: rightRace, army: twoPlayerArmy(rightRace ?? BLOC_RACES[0]), control: 'human' };
+  const sim = createBattle({ left, right });
+
+  overlay.dataset.mode = mode;
+  if (setup) {
+    overlay.dataset.region = setup.region;
+    overlay.dataset.defender = setup.defender.kind === 'race' ? setup.defender.race : 'contested';
+  }
+
+  // ---- the stage
+  const viewport = document.createElement('div');
+  viewport.className = 'viewport';
+  overlay.appendChild(viewport);
+  const stage = document.createElement('div');
+  stage.className = 'stage';
+  stage.dataset.role = 'stage';
+  stage.style.width = `${STAGE_WIDTH}px`;
+  stage.style.height = `${STAGE_HEIGHT}px`;
+  stage.style.transform = `scale(${zoom})`;
+  viewport.appendChild(stage);
+  stage.appendChild(buildBackdrop());
+
+  const hud = buildHud(stage, (side) => issue(side, 'charge'));
+
+  const field = document.createElement('div');
+  field.className = 'field';
+  field.dataset.role = 'field';
+  stage.appendChild(field);
+  const unitLayer = buildUnitLayer(field, {
+    left: leftRace,
+    right: rightRace ?? leftRace,
+  });
+  const arrows = {} as Record<Side, HTMLDivElement>;
+  for (const side of ['left', 'right'] as const) {
+    const arrow = document.createElement('div');
+    arrow.className = `lane-arrow ${side}`;
+    arrow.dataset.role = `arrow-${side}`;
+    arrow.dataset.side = side;
+    arrow.textContent = side === 'left' ? '▶' : '◀';
+    field.appendChild(arrow);
+    arrows[side] = arrow;
+  }
+
+  const racks = document.createElement('div');
+  racks.className = 'racks';
+  stage.appendChild(racks);
+  const atlasFor = (race: RaceId | null) => loadAtlas(ctx, race);
+  const leftAtlas = atlasFor(leftRace);
+  const rightAtlas = atlasFor(rightRace);
+  const leftRack = buildRack(racks, {
+    side: 'left',
+    race: leftRace,
+    army: left.army,
+    ...leftAtlas,
+    onSelect: (index) => select('left', index),
+  });
+  const rightRack = buildRack(racks, {
+    side: 'right',
+    race: rightRace,
+    army: right.army,
+    ...rightAtlas,
+    onSelect: (index) => select('right', index),
+  });
+  leftRack.root.dataset.control = left.control;
+  rightRack.root.dataset.control = right.control;
+  if (setup && setup.statBonus !== 1) {
+    const bonus = document.createElement('span');
+    bonus.className = 'stat-bonus';
+    bonus.dataset.role = 'stat-bonus';
+    bonus.dataset.bonus = String(setup.statBonus);
+    bonus.textContent = `×${setup.statBonus}`;
+    bonus.title = `Defender stats ×${setup.statBonus}`;
+    rightRack.root.querySelector('.rack-header')?.appendChild(bonus);
+  }
+
+  // ---- footer
+  const footer = document.createElement('div');
+  footer.className = 'footer';
+  footer.dataset.role = 'footer';
+  stage.appendChild(footer);
+  const level = document.createElement('span');
+  level.className = 'level';
+  level.dataset.role = 'level';
+  level.textContent = setup ? `Level ${save.campaignLevel}` : '2 Player';
+  level.dataset.level = setup ? String(save.campaignLevel) : 'two-player';
+  const matchup = document.createElement('span');
+  matchup.className = 'matchup';
+  matchup.dataset.role = 'matchup';
+  matchup.textContent = setup
+    ? `${raceName(leftRace)} attacking ${regionName(setup.region)} · ${rightRace ? raceName(rightRace) : `${CONTESTED_LABEL} host`}`
+    : `${raceName(leftRace)} vs ${raceName(rightRace ?? leftRace)}`;
+  footer.append(level, matchup);
+  const controls = document.createElement('div');
+  controls.className = 'controls';
+  footer.appendChild(controls);
+  footerButton(controls, 'Main menu', 'menu', () => {
+    if (setup) ctx.campaign.update({ battleRegion: null });
+    void ctx.navigate('menu');
+  });
+  const surrender = footerButton(controls, 'Surrender', 'surrender', () => sim.surrender('left'));
+  footerButton(controls, 'Options', 'options', () => void ctx.navigate('options'));
+  footerButton(controls, 'Retreat', 'retreat', () => {
+    if (setup) ctx.campaign.update({ battleRegion: null });
+    void ctx.navigate('retreat');
+  });
+
+  // ---- result panel
+  const panel = document.createElement('div');
+  panel.className = 'result-panel';
+  panel.dataset.role = 'result-panel';
+  panel.hidden = true;
+  const panelTitle = document.createElement('h2');
+  panelTitle.dataset.role = 'result-title';
+  const panelScores = document.createElement('p');
+  panelScores.dataset.role = 'result-scores';
+  const continueButton = document.createElement('button');
+  continueButton.type = 'button';
+  continueButton.dataset.action = 'finished';
+  continueButton.textContent = 'Continue';
+  panel.append(panelTitle, panelScores, continueButton);
+  stage.appendChild(panel);
+
+  // ---- commands
+  const issue = (side: Side, command: SpawnerCommand) => {
+    sim.command(side, command);
+  };
+  const select = (side: Side, index: number) => {
+    const current = sim.snapshot().spawners[side].selected;
+    const count = sim.snapshot().sides[side].army.length;
+    const forward = (index - current + count) % count;
+    const backward = (current - index + count) % count;
+    const steps = forward <= backward ? forward : backward;
+    const command: SpawnerCommand = forward <= backward ? 'next-unit' : 'previous-unit';
+    for (let i = 0; i < steps; i++) sim.command(side, command);
+    render(sim.snapshot());
+  };
+  const input = bindBattleInput({
+    humans: setup ? ['left'] : ['left', 'right'],
+    leftUsesBothSets: Boolean(setup),
+    issue,
+  });
+
+  // ---- rendering
+  let lastFrame: FrameState = sim.snapshot();
+  let ended = false;
+  let finished = false;
+  const render = (frame: FrameState) => {
+    lastFrame = frame;
+    hud.update(frame);
+    leftRack.update(frame);
+    rightRack.update(frame);
+    unitLayer.update(frame);
+    for (const side of ['left', 'right'] as const) {
+      const lane = frame.spawners[side].lane;
+      arrows[side].style.top = `${laneY(lane) - 18}px`;
+      arrows[side].dataset.lane = String(lane);
+    }
+    overlay.dataset.tick = String(frame.tick);
+    overlay.dataset.winner = frame.winner ?? '';
+    surrender.disabled = frame.winner !== null;
+    continueButton.disabled = frame.winner === null;
+    if (frame.winner && !ended) {
+      ended = true;
+      panel.hidden = false;
+      panel.dataset.winner = frame.winner;
+      panelTitle.textContent = resultTitle(frame.winner, mode);
+      panelScores.textContent = `${frame.leftScore} – ${frame.rightScore}`;
+      overlay.dataset.result = frame.winner;
+      recordOutcome(frame);
+    }
+  };
+  const recordOutcome = (frame: FrameState) => {
+    const winner = frame.winner!;
+    const result: BattleResult = { winner, leftScore: frame.leftScore, rightScore: frame.rightScore, mode };
+    const current = ctx.campaign.read();
+    const patch: Partial<Omit<CampaignSave, 'schemaVersion'>> = { lastBattle: result };
+    if (setup) {
+      patch.gold = current.gold + frame.spawners.left.gold;
+      patch.lifetimeKills = current.lifetimeKills + frame.spawners.left.kills;
+      if (winner === 'left') Object.assign(patch, applyVictory(current, setup.region) ?? { battleRegion: null });
+      else patch.battleRegion = null;
+    }
+    ctx.campaign.update(patch);
+  };
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    void ctx.navigate('finished');
+  };
+  continueButton.addEventListener('click', finish);
+
+  // ---- the frame loop: fixed 24 fps steps from the host's frames
+  let accumulator = 0;
+  const step = () => {
+    input.pumpHeld();
+    sim.tick();
+    const frame = sim.snapshot();
+    render(frame);
+    if (frame.winner && frame.winnerTick !== null && frame.tick - frame.winnerTick >= RESULT_AUTO_CONTINUE_FRAMES) finish();
+  };
+  ctx.onFrame((dt) => {
+    accumulator += Math.min(dt, MAX_CATCH_UP_SECONDS);
+    while (accumulator >= FRAME_SECONDS - 1e-9 && !finished) {
+      accumulator -= FRAME_SECONDS;
+      step();
+    }
+  });
+  render(lastFrame);
+
+  attachBattleHandle(overlay, { simulation: sim, frame: () => lastFrame });
+
+  return () => {
+    input.dispose();
+    attachBattleHandle(overlay, null);
+  };
+}
+
+function footerButton(parent: HTMLElement, label: string, action: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = label;
+  b.dataset.action = action;
+  b.addEventListener('click', onClick);
+  parent.appendChild(b);
+  return b;
+}
+
+function resultTitle(winner: Side, mode: BattleResult['mode']): string {
+  if (mode === 'campaign') return winner === 'left' ? 'Victory' : 'Defeat';
+  return winner === 'left' ? 'Left player wins' : 'Right player wins';
+}
+
+/** The race's atlas json from the loaded manifest, when the host actually parsed it. */
+function loadAtlas(ctx: ScreenContext, race: RaceId | null): { atlas: AtlasJson | null; atlasImage: string | null } {
+  const url = race ? raceVisuals(race).atlas : referencedAtlases()[0];
+  if (!url || !ctx.assets.has(`atlas:${url}`)) return { atlas: null, atlasImage: null };
+  const resource = ctx.assets.get<unknown>(`atlas:${url}`);
+  if (!isAtlas(resource)) return { atlas: null, atlasImage: null };
+  const dir = url.slice(0, url.lastIndexOf('/') + 1);
+  return { atlas: resource, atlasImage: `${dir}${resource.texture}` };
+}
+
+function isAtlas(v: unknown): v is AtlasJson {
+  return typeof v === 'object' && v !== null && 'frames' in v && typeof (v as AtlasJson).frames === 'object' && typeof (v as AtlasJson).texture === 'string';
 }

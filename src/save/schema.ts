@@ -11,9 +11,10 @@ import { BLOC_RACES, RACES, type RaceId } from '../roster/races';
 
 /**
  * Bump when the shape of `CampaignSave` changes; add a step to `migrations.ts`.
- * History: 1 — initial; 2 — added `zoom`; 3 — added `battleRegion`, race7.
+ * History: 1 — initial; 2 — added `zoom`; 3 — added `battleRegion`, race7;
+ * 4 — added `lastBattle`.
  */
-export const SAVE_SCHEMA_VERSION = 3;
+export const SAVE_SCHEMA_VERSION = 4;
 
 /**
  * Race ids come from the roster definition (`src/roster/races.ts`) and are
@@ -33,6 +34,22 @@ export type Quality = (typeof QUALITIES)[number];
 export const ZOOM_LEVELS = [0.75, 1, 1.25] as const;
 export type ZoomLevel = (typeof ZOOM_LEVELS)[number];
 export const DEFAULT_ZOOM: ZoomLevel = 1;
+
+export const BATTLE_SIDES = ['left', 'right'] as const;
+export type BattleSide = (typeof BATTLE_SIDES)[number];
+
+/**
+ * How the last battle ended, written by the battle screen when a winner is
+ * decided and read by the result screen (schema 4+). The left side is the
+ * campaign player; in a two-player battle it is the first player.
+ */
+export interface BattleResult {
+  winner: BattleSide;
+  leftScore: number;
+  rightScore: number;
+  /** `'campaign'` when fought over a region, `'two-player'` otherwise. */
+  mode: 'campaign' | 'two-player';
+}
 
 /** Every field the rules document lists for the single save slot. */
 export interface CampaignSave {
@@ -68,6 +85,8 @@ export interface CampaignSave {
    * campaign battle, e.g. a two-player skirmish.
    */
   battleRegion: string | null;
+  /** The last battle's outcome, or `null` before any battle has been fought (schema 4+). */
+  lastBattle: BattleResult | null;
 }
 
 /**
@@ -94,6 +113,7 @@ export function defaultSave(): CampaignSave {
     upgradeLevels: {},
     regionOwners: {},
     battleRegion: null,
+    lastBattle: null,
   };
 }
 
@@ -149,6 +169,9 @@ export function validateSave(
   if (value.battleRegion !== null && typeof value.battleRegion !== 'string') {
     return fail('battleRegion is not a string or null');
   }
+  if (value.lastBattle !== null && !isBattleResult(value.lastBattle)) {
+    return fail('lastBattle is not a battle result or null');
+  }
 
   const save: CampaignSave = {
     schemaVersion: expectedVersion,
@@ -166,8 +189,19 @@ export function validateSave(
     upgradeLevels: { ...(value.upgradeLevels as Record<string, number>) },
     regionOwners: { ...(value.regionOwners as Record<string, string | null>) },
     battleRegion: value.battleRegion as string | null,
+    lastBattle: value.lastBattle === null ? null : { ...(value.lastBattle as BattleResult) },
   };
   return { ok: true, save };
+}
+
+function isBattleResult(v: unknown): v is BattleResult {
+  return (
+    isRecord(v) &&
+    BATTLE_SIDES.includes(v.winner as BattleSide) &&
+    isNonNegativeInt(v.leftScore) &&
+    isNonNegativeInt(v.rightScore) &&
+    (v.mode === 'campaign' || v.mode === 'two-player')
+  );
 }
 
 function fail(reason: string): ValidationResult {

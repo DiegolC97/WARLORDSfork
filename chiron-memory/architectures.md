@@ -20,3 +20,17 @@ What: `src/roster/data.ts` defines the 19 units (speed, HP, recharge, range, cos
 ## Race ids live in src/roster/races.ts, a leaf both save and roster import
 
 What: `RACES`, `BLOC_RACES`, `UNLOCKABLE_RACE` and `RaceId` are defined in `src/roster/races.ts` (no imports) and re-exported by `src/save`; `data.ts` imports them from there · Why: `save/schema.ts` needs the roster's starter trio for its defaults and the roster needs `RaceId`, which would be a module cycle (dependency-cruiser's no-circular rule counts type-only imports) unless the id list sits in a leaf module · Where: src/roster/races.ts, src/save/schema.ts, src/roster/data.ts · Learned: when two modules need each other's constants, extract the shared constants into an import-free leaf rather than relaxing the cycle rule
+
+## The battle seam is a frame snapshot plus spawner commands; a reference simulation sits behind it
+
+**What:** `src/battle/types.ts` defines `FrameState` (tick, frames left, scores, territory-bar target and drawn width, winner, per-side `SpawnerState` with lane / selected unit / charged / recharge time / charge kills, every unit and projectile) and `SpawnerCommand` (`lane-up`, `lane-down`, `previous-unit`, `next-unit`, `release`, `charge`). `src/battle/simulation.ts` (`createBattle`) implements the rules document's battle frame — spawner and recharge (§4), scoring, bar and timer (§5), the unit state machine with melee strikes, projectiles and kill credit (§7–8) and the computer opponent (§13) — reading every statistic from `src/roster`. The battle screen renders snapshots and issues commands; it holds no rule. `battleHandle(overlay)` (in the seam, not the screen folder) exposes the simulation on a mounted battle overlay for tests.
+**Why:** the battle-screen work order was written against "the simulation's frame snapshot" but no simulation existed; defining the seam first lets a combat slice replace or refine the reference implementation without touching the screen or its tests.
+**Where:** `src/battle/`, `src/screens/battle/`, tests in `src/battle/simulation.test.ts` and `src/screens/battle/battle.test.ts`.
+**Learned:** 2026-10-15. Known simplifications in the reference simulation: projectile drift is not modelled, corpses are removed after a fixed 600 frames, the level-one tutorial does not hold the timer, and the enemy's difficulty upgrades (§12.4) are not applied yet.
+
+## Screens get a frame clock through EngineHost.onFrame and ctx.onFrame
+
+**What:** `EngineHost.onFrame(cb)` subscribes to rendered frames (PlayCanvas `app.on('update')`; `NullEngineHost` records callbacks and `tick(frames, fps)` delivers them in tests). The shell exposes it as `ctx.onFrame` and releases a screen's subscriptions on exit. The battle screen accumulates elapsed seconds and steps its simulation at a fixed 24 fps, capping catch-up at 0.25 s.
+**Why:** screens must not reach the engine app directly (it is `null` headless), and tests need to drive time deterministically.
+**Where:** `src/engine/host.ts`, `src/engine/nullHost.ts`, `src/engine/playcanvasHost.ts`, `src/shell/screenShell.ts`, `src/screens/battle/index.ts`.
+**Learned:** 2026-10-15.
