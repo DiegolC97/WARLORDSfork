@@ -24,6 +24,11 @@ export interface ScreenContext {
   setClearColor(r: number, g: number, b: number): void;
   /** Emit a navigation event; the route table decides the destination. */
   navigate(event: string): Promise<void>;
+  /**
+   * Run `cb` every rendered frame with the elapsed seconds until the returned
+   * function is called or the screen exits, whichever comes first.
+   */
+  onFrame(cb: (dtSeconds: number) => void): () => void;
 }
 
 export interface Screen {

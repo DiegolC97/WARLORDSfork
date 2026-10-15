@@ -29,6 +29,8 @@ interface Mounted {
   overlay: HTMLElement;
   root: ReturnType<EngineHost['createSceneRoot']>;
   assets: LoadedAssets;
+  /** Frame subscriptions the screen made; released on exit. */
+  frameSubscriptions: Set<() => void>;
 }
 
 export class ScreenShell {
@@ -120,7 +122,9 @@ export class ScreenShell {
     this.overlayRoot.appendChild(overlay);
     const root = this.host.createSceneRoot(`screen:${id}`);
     const screen = def.create();
-    this.mounted = { id, screen, overlay, root, assets };
+    const frameSubscriptions = new Set<() => void>();
+    const mounted: Mounted = { id, screen, overlay, root, assets, frameSubscriptions };
+    this.mounted = mounted;
     this.visited.push(id);
 
     screen.enter({
@@ -132,6 +136,16 @@ export class ScreenShell {
       saveOutcome: this.saveOutcome,
       setClearColor: (r, g, b) => this.host.setClearColor(r, g, b),
       navigate: (event) => this.navigate(event),
+      onFrame: (cb) => {
+        if (this.mounted !== mounted) return () => {};
+        const off = this.host.onFrame(cb);
+        const release = () => {
+          off();
+          frameSubscriptions.delete(release);
+        };
+        frameSubscriptions.add(release);
+        return release;
+      },
     });
   }
 
@@ -140,6 +154,7 @@ export class ScreenShell {
     if (!current) return;
     this.mounted = null;
     current.screen.exit?.();
+    for (const release of [...current.frameSubscriptions]) release();
     current.overlay.remove();
     current.root?.destroy();
     current.assets.release();

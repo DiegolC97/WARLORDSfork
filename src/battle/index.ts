@@ -1,0 +1,27 @@
+export {
+  SIDES,
+  FRAMES_PER_SECOND,
+  LANE_COUNT,
+  INITIAL_LANE,
+  BATTLE_LENGTH_FRAMES,
+  KILLS_PER_CHARGE,
+  RESULT_AUTO_CONTINUE_FRAMES,
+  BAR_WIDTH,
+  BAR_PIXELS_PER_POINT,
+  BAR_CENTRE,
+  FIELD,
+  type Side,
+  type SpawnerCommand,
+  type SpawnerState,
+  type UnitPhase,
+  type UnitState,
+  type ProjectileState,
+  type WinReason,
+  type SideSummary,
+  type FrameState,
+  type SideSetup,
+  type BattleConfig,
+  type BattleSimulation,
+} from './types';
+export { createBattle, ReferenceBattle } from './simulation';
+export { battleHandle, attachBattleHandle, type BattleHandle } from './handle';

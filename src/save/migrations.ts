@@ -31,6 +31,12 @@ export const MIGRATIONS: readonly Migration[] = [
     to: 3,
     apply: (raw) => ({ ...raw, battleRegion: null }),
   },
+  {
+    // 3 → 4: the battle screen records how the last battle ended for the result screen.
+    from: 3,
+    to: 4,
+    apply: (raw) => ({ ...raw, lastBattle: null }),
+  },
 ];
 
 export type MigrateResult =

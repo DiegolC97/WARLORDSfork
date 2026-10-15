@@ -7,6 +7,7 @@ export {
   QUALITIES,
   ZOOM_LEVELS,
   DEFAULT_ZOOM,
+  BATTLE_SIDES,
   defaultSave,
   validateSave,
   type CampaignSave,
@@ -14,6 +15,8 @@ export {
   type BlocRaceId,
   type Quality,
   type ZoomLevel,
+  type BattleSide,
+  type BattleResult,
 } from './schema';
 export { MIGRATIONS, migrateSave, type Migration, type RawSave } from './migrations';
 export {

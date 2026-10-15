@@ -3,9 +3,9 @@
 A fan remake on the [PlayCanvas](https://playcanvas.com) engine. This
 repository currently contains the playable skeleton: an app shell, the main
 menu with its instructions, options and credits screens, the campaign map
-with its 28 regions and conquest rules, placeholder shop/battle/result
-screens, navigation between them, and the single-slot campaign save. No
-battle gameplay yet.
+with its 28 regions and conquest rules, the battle screen over a reference
+battle simulation, a placeholder shop and result screen, navigation between
+them, and the single-slot campaign save.
 
 The working title and the working race names collide with a live commercial
 setting. They live in exactly one file, `src/names/displayNames.ts`, and the
@@ -44,12 +44,13 @@ this repository. The upstream engine repository is a read-only reference.
 index.html              canvas + overlay root
 src/main.ts             browser entry: creates the PlayCanvas host and boots the app
 src/app.ts              composition root (save store → campaign → shell)
-src/engine/             EngineHost seam: playcanvasHost (real) and nullHost (headless tests)
+src/engine/             EngineHost seam: playcanvasHost (real) and nullHost (headless tests); onFrame is the frame clock
 src/assets/loader.ts    manifest-driven asset loading (textures, atlases, json, audio, font)
 src/names/              display names: game title, race names, unit base names and per-race prefixes, region names, credit
 src/save/               the ONLY code that touches stored data (schema, migrations, saveStore)
 src/campaign/           the campaign map as data (regions, blocs, adjacency, palette) and its pure rules
 src/roster/             THE roster definition (data.ts: 19 units, races, palettes, atlases), its resolvers and validator
+src/battle/             the battle seam: FrameState snapshot + SpawnerCommand (types.ts) and the reference simulation
 src/shell/routes.ts     navigation as data: screen id + event → next screen id
 src/shell/screenShell.ts  holds exactly one active screen, runs transitions
 src/screens/<id>/       one folder per screen; index.ts is its only public file
@@ -73,7 +74,8 @@ menu   --options-->      options      map    --battle-->    battle
 menu   --credits-->      credits      battle --retreat-->   map
 instructions/options/credits --back--> menu
 battle --finished-->     result       result --continue-->  map
-                                      result --menu-->      menu
+battle --menu-->         menu         result --menu-->      menu
+battle --options-->      options
 ```
 
 ### Main menu
@@ -125,6 +127,71 @@ Colours are the races' roster palette tints (Okabe–Ito, defined in
 requires every pair of the six bloc colours and the contested colour to stay
 apart. Contested regions are also hatched and the player's holdings outlined,
 so colour is never the only cue.
+
+### Battle
+
+`src/battle/` is the seam between the game's rules and the battle screen.
+`types.ts` defines the **frame snapshot** (`FrameState`: tick, frames left,
+scores, the territory bar's target and drawn width, the winner, each side's
+spawner — lane, selected unit, recharge progress, charge kills — and every
+unit and projectile on the field) and the **spawner commands** (`lane-up`,
+`lane-down`, `previous-unit`, `next-unit`, `release`, `charge`).
+`simulation.ts` (`createBattle`) is the reference implementation of the
+rules document's battle frame: spawner and recharge (§4), scoring, the
+territory bar and the five-minute timer (§5), the unit state machine with
+melee strikes, projectiles and kill credit (§7–8) and the computer opponent
+(§13). Every statistic comes from `src/roster`. It simplifies a few things
+for now — no projectile drift, corpses removed after a fixed time, the
+timer runs from the first frame, enemy difficulty upgrades not applied —
+which the combat slice refines behind the same snapshot type.
+
+The battle screen (`src/screens/battle/`) renders snapshots and sends
+commands back; it holds no rule. It is a DOM/SVG stage of the original's
+700 × 500 pixels scaled by the saved zoom (`layout.ts` maps field units onto
+the field band):
+
+- the **territory bar** draws the width the simulation reports (centre
+  plus 14 px per point of lead; full or empty is an instant win) with both
+  scores;
+- the **dial** is a clock face whose wedge shrinks over the five minutes,
+  showing the seconds only in the last minute;
+- a **charge meter** per side fills across twenty kills; once armed, the
+  Charge control (or Q / 0) releases the selected unit into all eight lanes;
+- the **spawner rack** per side lays one to eight buttons out with
+  `rackGrid` (at most four per row, equal widths from the side's width,
+  last row centred); each shows the unit's portrait (its race-atlas frame
+  over the race tint, with a two-letter initial while the atlas is the
+  placeholder), its per-race name and its recharge state;
+- **units** are DOM sprites in the race tint with a team accent layer — a
+  white pennant flying right for the left side, a black one flying left
+  for the right — so two armies of the same race stay telling apart;
+- the **footer** carries the level indicator (campaign level, or "2 Player"),
+  Main menu, Surrender (hands the battle to the right side), Options and
+  Retreat.
+
+Controls (`input.ts`, rules §3): the left player uses W/S for the lane, A/D
+for the unit, Space to release and Q to charge; the right player uses the
+arrows (Right = previous, Left = next, mirrored as in the original), Enter
+and 0. In a campaign the left player may also use the arrow set and the
+computer drives the right spawner. Lane keys cycle 1–8 and wrap (the work
+order's choice; the original clamps). Lane and unit keys act once per press;
+release and charge keys are held state sampled every frame, so holding a
+spawn key yields exactly one unit per recharge period. Both sides' keys are
+handled independently, so simultaneous presses are never dropped.
+
+In a campaign the save's `battleRegion` names the region under attack; the
+defenders come from the campaign rules. With no `battleRegion` (the
+two-player entry) both spawners are human and each side receives the
+roster's two-player army. When a winner is decided no more units spawn, the
+losing side retreats, the result panel appears (auto-continues after 240
+frames or on Continue) and the outcome is written to the save: `lastBattle`
+for the result screen, plus in a campaign the gold and kills earned and,
+on a victory, the region (`applyVictory`).
+
+The frame clock is `ctx.onFrame` (from `EngineHost.onFrame`): the screen
+accumulates elapsed seconds and steps the simulation at a fixed 24 fps.
+Headless tests drive it with `NullEngineHost.tick(frames)` and reach the
+simulation through `battleHandle(overlay)` from `src/battle`.
 
 To add a screen: add its id to `SCREEN_IDS`, add a row to `ROUTES`, create
 `src/screens/<id>/index.ts` exporting a `ScreenDefinition`, and register it in
@@ -255,6 +322,7 @@ from the rules document (section 15) plus the rendering zoom:
 | `upgradeLevels` | `{ [upgradeId]: level }` | `{}` |
 | `regionOwners` | `{ [regionId]: 'player' \| raceId \| null }` | `{}` — filled when a race is picked; `null` is an untaken contested region |
 | `battleRegion` | region id or `null` (schema 3+) | `null` — the region under attack during a campaign battle |
+| `lastBattle` | `{ winner, leftScore, rightScore, mode }` or `null` (schema 4+) | `null` — how the last battle ended, for the result screen |
 
 Screens read and write the campaign through `ctx.campaign` (`read()` /
 `update(patch)`); every update is persisted immediately. Only
@@ -282,4 +350,5 @@ The game always starts. `SaveStore.load()` reports what happened:
 3. Update the validator for the new fields.
 
 Schema history: 1 — initial; 2 — added `zoom` (migration sets it to `1`);
-3 — added `battleRegion` (migration sets it to `null`) and the `race7` id.
+3 — added `battleRegion` (migration sets it to `null`) and the `race7` id;
+4 — added `lastBattle` (migration sets it to `null`).

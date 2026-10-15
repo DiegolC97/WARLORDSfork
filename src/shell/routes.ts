@@ -39,7 +39,7 @@ export const ROUTES: RouteTable = {
   credits: { back: 'menu' },
   map: { back: 'menu', shop: 'shop', battle: 'battle' },
   shop: { back: 'map' },
-  battle: { finished: 'result', retreat: 'map' },
+  battle: { finished: 'result', retreat: 'map', menu: 'menu', options: 'options' },
   result: { continue: 'map', menu: 'menu' },
 };
 
