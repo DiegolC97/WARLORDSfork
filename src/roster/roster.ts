@@ -13,6 +13,7 @@ import {
   ROSTER,
   UNIT_IDS,
   UPGRADE_TRACKS,
+  UPGRADE_TRACK_IDS,
   type RosterDefinition,
   type UnitDefinition,
   type UnitId,
@@ -137,15 +138,22 @@ export function killBounty(unit: UnitId, def: RosterDefinition = ROSTER): number
 
 /**
  * The shop's "Buy Unit" list (rules §11): in id order, every unit the
- * player does not own yet and may field as `race`, at most eight entries.
+ * player does not own yet and may field as `race`. The document caps the
+ * panel at eight entries, which with its ten generics always left room for
+ * the race's exclusive; with thirteen generics that cap would hide the
+ * exclusive from a new player, so the list is not cut.
  */
 export function shopOffers(owned: readonly number[], race: RaceId, def: RosterDefinition = ROSTER): UnitId[] {
-  return availableUnits(race, def)
-    .filter((unit) => !owned.includes(unit))
-    .slice(0, SHOP_OFFER_LIMIT);
+  return availableUnits(race, def).filter((unit) => !owned.includes(unit));
 }
 
-export const SHOP_OFFER_LIMIT = 8;
+/** Slots on the army rack: the campaign army never exceeds this many unit types. */
+export const ARMY_SLOTS = 8;
+
+/** True when the army has a free rack slot for one more unit type. */
+export function hasArmySlot(owned: readonly number[]): boolean {
+  return owned.length < ARMY_SLOTS;
+}
 
 /** The level every race starts each upgrade track at: 0, except its handicap track at −1 (rules §10). */
 export const HANDICAP_LEVEL = -1;
@@ -159,9 +167,17 @@ export function raceStartingUpgrades(race: RaceId, def: RosterDefinition = ROSTE
   return { [def.races[race].handicap]: HANDICAP_LEVEL };
 }
 
-/** Gold the next level of an upgrade track costs: `base × (1 + |level|)` (rules §9). */
+/** Gold the next level of an upgrade track costs: `base × (1 + |level|)` (rules §9). No level cap. */
 export function upgradeCost(track: UpgradeTrack, currentLevel: number): number {
   return UPGRADE_TRACKS[track].baseCost * (1 + Math.abs(currentLevel));
+}
+
+/** The seven tracks in shop order, each with its level in `levels` (missing = 0) and the cost of the next level. */
+export function upgradePanel(levels: Readonly<Partial<Record<string, number>>> | undefined): { track: UpgradeTrack; level: number; cost: number }[] {
+  return UPGRADE_TRACK_IDS.map((track) => {
+    const level = levels?.[track] ?? 0;
+    return { track, level, cost: upgradeCost(track, level) };
+  });
 }
 
 export interface RaceVisuals {

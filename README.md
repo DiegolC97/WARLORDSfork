@@ -4,7 +4,8 @@ A fan remake on the [PlayCanvas](https://playcanvas.com) engine. This
 repository currently contains the playable skeleton: an app shell, the main
 menu with its instructions, options and credits screens, the campaign map
 with its 28 regions and conquest rules, the battle screen over a reference
-battle simulation, a placeholder shop and result screen, navigation between
+battle simulation, the shop with its upgrade panel and army rack, a
+placeholder result screen, navigation between
 them, and the single-slot campaign save.
 
 The working title and the working race names collide with a live commercial
@@ -55,6 +56,7 @@ src/shell/routes.ts     navigation as data: screen id + event → next screen id
 src/shell/screenShell.ts  holds exactly one active screen, runs transitions
 src/screens/<id>/       one folder per screen; index.ts is its only public file
 src/ui/placeholder.ts   throwaway DOM helpers for placeholder screens
+src/ui/portrait.ts      a unit's portrait (race-atlas frame over the race tint); shared by the battle and shop racks
 public/assets/          static assets served at /assets/… (units/placeholder-units.* is the stand-in unit atlas)
 ```
 
@@ -69,10 +71,11 @@ where that leads:
 boot   --ready-->        menu
 menu   --campaign-->     map          map    --back-->      menu
 menu   --twoPlayer-->    battle       map    --shop-->      shop
-menu   --instructions--> instructions shop   --back-->      map
-menu   --options-->      options      map    --battle-->    battle
-menu   --credits-->      credits      battle --retreat-->   map
-instructions/options/credits --back--> menu
+menu   --instructions--> instructions shop   --continue-->  map
+menu   --options-->      options      shop   --menu-->      menu
+menu   --credits-->      credits      shop   --guide-->     instructions
+instructions/options/credits --back--> menu  map    --battle-->    battle
+                                      battle --retreat-->   map
 battle --finished-->     result       result --continue-->  map
 battle --menu-->         menu         result --menu-->      menu
 battle --options-->      options
@@ -218,6 +221,38 @@ A screen declares its assets as a manifest on its definition. The shell loads
 them before `enter()` and releases them on exit; `ctx.assets.get(id)` returns
 the loaded resource. Put files under `public/assets/`.
 
+### Shop
+
+The shop (`src/screens/shop/`, rules §9 and §11) is reached from the map and
+is where gold is spent between battles. It holds no rule: every number is
+read from the roster or the save, and every purchase is one
+`ctx.campaign.update`, persisted at once, so quitting after buying cannot
+duplicate gold.
+
+- The header shows the save's gold and lifetime kills, which the battle
+  screen adds to when a campaign battle ends.
+- The **upgrade panel** lists the seven tracks in the document's order
+  (`UPGRADE_TRACK_IDS`): the shop text (`UPGRADE_TRACKS[track].label`), the
+  per-level effect, the current level and the next cost
+  (`upgradeCost` = base × (1 + |level|), no cap). A row whose cost exceeds
+  the gold is greyed and its Buy disabled; affordability is recomputed after
+  every purchase, so buying one track greys the others the moment they fall
+  out of reach, and a row is buyable again as soon as gold suffices. A
+  race's handicap track starts at −1 and costs double to climb out of.
+- The **army rack** has `ARMY_SLOTS` (eight) slots: the owned units in the
+  order bought, each with its portrait and per-race name, then the Buy unit
+  slot, then empty slots. With eight units owned the buy slot disappears
+  and the rack states that the army is full.
+- **Buy unit** opens the offer list: every unit the player's race may field
+  and does not own yet, in id order (`shopOffers`; the document's cap of
+  eight entries is not applied, since with thirteen generic units it would
+  hide the race's exclusive), each with its price (`shopPrice`), stats,
+  bounty and a Buy that is disabled with a stated reason when unaffordable.
+  A player who can afford nothing is told the cheapest price and can still
+  continue.
+- The footer offers Main menu, Strategy guide (the instructions screen) and
+  Continue (the map); none is ever disabled.
+
 ## Roster
 
 `src/roster/data.ts` is the single definition of the six races and the
@@ -260,7 +295,8 @@ tests can run them over a modified copy:
 - `rosterFor(race)` / `mixedRoster()` — a region's defenders and the contested host;
 - `twoPlayerArmy(race, rng)` — the two-player rule: trio plus two distinct random generics;
 - `unitDisplayName(unit, race)` — the per-race name (see below);
-- `shopPrice(unit)`, `killBounty(unit)` (= `ceil(cost / 50)`), `shopOffers(owned, race)`, `upgradeCost(track, level)`;
+- `shopPrice(unit)`, `killBounty(unit)` (= `ceil(cost / 50)`), `shopOffers(owned, race)`, `ARMY_SLOTS` / `hasArmySlot(owned)`;
+- `upgradeCost(track, level)`, `upgradePanel(levels)` (the seven tracks in shop order with level and next cost), `UPGRADE_TRACK_IDS`;
 - `raceVisuals(race)` — tint, atlas url and the frame for each unit, for the renderer.
 
 Per-race names keep the statistics identical while reading thematically: a

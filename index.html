@@ -42,6 +42,42 @@
       .map .swatch i.player { border: 2px solid #ffffff; }
       .map [data-role="targets"] button, .map [data-role="race-picker"] button { font-size: 13px; padding: 5px 10px; }
 
+      /* Shop — upgrade panel, army rack and gold, after the reference layout */
+      .screen.shop { justify-content: flex-start; padding: 10px 16px; gap: 10px; overflow: auto; box-sizing: border-box; background: #14201a; }
+      .shop section { width: min(92vw, 760px); }
+      .shop h1 { font-size: 24px; margin: 0; }
+      .shop h2 { font-size: 16px; margin: 0 0 6px; color: #ffd966; }
+      .shop p { margin: 0; }
+      .shop .hint { font-size: 13px; opacity: 0.85; line-height: 1.4; }
+      .shop .header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+      .shop .totals { display: flex; gap: 18px; margin-left: auto; }
+      .shop .stat { display: inline-flex; gap: 6px; align-items: baseline; font-size: 15px; }
+      .shop .stat-label { opacity: 0.8; }
+      .shop .stat-value { font-weight: 700; font-size: 20px; color: #ffd966; }
+      .shop .tracks { display: flex; flex-direction: column; gap: 4px; }
+      .shop .track { display: grid; grid-template-columns: 1.6fr 2fr 0.8fr 0.9fr auto; gap: 8px; align-items: center; padding: 5px 8px; background: #233a2d; border: 1px solid #3c5a48; border-radius: 4px; font-size: 13px; transition: opacity 120ms; }
+      .shop .track .label { font-weight: 700; }
+      .shop .track .effect { opacity: 0.85; }
+      .shop .track .cost { text-align: right; font-weight: 700; }
+      .shop .track.unaffordable { opacity: 0.45; filter: grayscale(1); }
+      .shop .track button, .shop .offer button { font-size: 13px; padding: 4px 10px; }
+      .shop .rack { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+      .shop .slot { position: relative; min-height: 72px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px; box-sizing: border-box; border: 1px solid #3c5a48; border-radius: 4px; background: #233a2d; font-size: 11px; text-align: center; }
+      .shop .slot.empty { border-style: dashed; opacity: 0.5; }
+      .shop .slot.buy { border-color: #ffd966; }
+      .shop .slot.buy button { font-size: 12px; padding: 4px 8px; }
+      .shop .slot .name { overflow-wrap: break-word; line-height: 1.2; }
+      .shop .portrait { position: relative; flex: 0 0 auto; width: 28px; height: 28px; border: 1px solid #000; border-radius: 3px; overflow: hidden; }
+      .shop .portrait .sprite { position: absolute; inset: 0; image-rendering: pixelated; background-repeat: no-repeat; mix-blend-mode: luminosity; }
+      .shop .portrait .initial { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000; }
+      .shop .offer-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+      .shop .offer { display: grid; grid-template-columns: auto 1.2fr 3fr auto; gap: 8px; align-items: center; padding: 5px 8px; background: #233a2d; border: 1px solid #3c5a48; border-radius: 4px; font-size: 12px; }
+      .shop .offer .name { font-weight: 700; }
+      .shop .offer .stats { opacity: 0.85; }
+      .shop .offer.unaffordable { opacity: 0.45; filter: grayscale(1); }
+      .shop .footer { display: flex; gap: 8px; justify-content: center; padding-bottom: 8px; }
+      @media (max-width: 640px) { .shop .track { grid-template-columns: 1fr 1fr; } .shop .rack { grid-template-columns: repeat(4, 1fr); } }
+
       /* Main menu — layout after the reference: dark field, white band, lockup left, banner right, list below */
       .screen.menu { display: block; background: #3a3a3a; color: #fff; }
       .menu .gothic { font-family: 'Old English Text MT', 'Luminari', 'Cloister Black', 'Blackletter', 'UnifrakturMaguntia', fantasy, serif; }

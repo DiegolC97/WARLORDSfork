@@ -24,11 +24,12 @@ import {
 } from '../../roster';
 import type { BattleResult, CampaignSave } from '../../save';
 import type { ScreenContext, ScreenDefinition } from '../../shell/screen';
+import { atlasAssetId, atlasFromAssets } from '../../ui/portrait';
 import { buildBackdrop } from './backdrop';
 import { buildHud } from './hud';
 import { bindBattleInput } from './input';
 import { STAGE_HEIGHT, STAGE_WIDTH, laneY } from './layout';
-import { buildRack, type AtlasJson } from './rack';
+import { buildRack } from './rack';
 import { buildUnitLayer } from './units';
 
 /**
@@ -51,7 +52,7 @@ const MAX_CATCH_UP_SECONDS = 0.25;
 
 export const battleScreen: ScreenDefinition = {
   id: 'battle',
-  assets: referencedAtlases().map((url) => ({ id: `atlas:${url}`, type: 'json' as const, url })),
+  assets: referencedAtlases().map((url) => ({ id: atlasAssetId(url), type: 'json' as const, url })),
   create: () => {
     let dispose: () => void = () => {};
     return {
@@ -145,7 +146,7 @@ function mountBattle(ctx: ScreenContext): () => void {
   const racks = document.createElement('div');
   racks.className = 'racks';
   stage.appendChild(racks);
-  const atlasFor = (race: RaceId | null) => loadAtlas(ctx, race);
+  const atlasFor = (race: RaceId | null) => atlasFromAssets(ctx.assets, race ? raceVisuals(race).atlas : referencedAtlases()[0]);
   const leftAtlas = atlasFor(leftRace);
   const rightAtlas = atlasFor(rightRace);
   const leftRack = buildRack(racks, {
@@ -332,18 +333,4 @@ function footerButton(parent: HTMLElement, label: string, action: string, onClic
 function resultTitle(winner: Side, mode: BattleResult['mode']): string {
   if (mode === 'campaign') return winner === 'left' ? 'Victory' : 'Defeat';
   return winner === 'left' ? 'Left player wins' : 'Right player wins';
-}
-
-/** The race's atlas json from the loaded manifest, when the host actually parsed it. */
-function loadAtlas(ctx: ScreenContext, race: RaceId | null): { atlas: AtlasJson | null; atlasImage: string | null } {
-  const url = race ? raceVisuals(race).atlas : referencedAtlases()[0];
-  if (!url || !ctx.assets.has(`atlas:${url}`)) return { atlas: null, atlasImage: null };
-  const resource = ctx.assets.get<unknown>(`atlas:${url}`);
-  if (!isAtlas(resource)) return { atlas: null, atlasImage: null };
-  const dir = url.slice(0, url.lastIndexOf('/') + 1);
-  return { atlas: resource, atlasImage: `${dir}${resource.texture}` };
-}
-
-function isAtlas(v: unknown): v is AtlasJson {
-  return typeof v === 'object' && v !== null && 'frames' in v && typeof (v as AtlasJson).frames === 'object' && typeof (v as AtlasJson).texture === 'string';
 }

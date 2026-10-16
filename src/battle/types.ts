@@ -160,6 +160,10 @@ export interface SideSummary {
   readonly race: RaceId | null;
   readonly army: readonly UnitId[];
   readonly control: 'human' | 'ai';
+  /** The upgrade levels the side fights with, by track (missing tracks are 0); what every formula reads. */
+  readonly upgrades: Readonly<Partial<Record<UpgradeTrack, number>>>;
+  /** Multiplier on the side's hit points and strike power (1 unless the contested host). */
+  readonly statBonus: number;
 }
 
 export interface FrameState {

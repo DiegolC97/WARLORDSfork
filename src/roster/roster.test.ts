@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { EXCLUSIVE_UNIT_NAMES, RACE_UNIT_PREFIX, UNIT_NAMES } from '../names';
 import { defaultSave } from '../save';
 import {
+  ARMY_SLOTS,
   BLOC_RACES,
   RACES,
   ROSTER,
   UNIT_IDS,
+  UPGRADE_TRACKS,
+  UPGRADE_TRACK_IDS,
   availableUnits,
+  hasArmySlot,
   exclusiveOf,
   exclusiveUnits,
   genericUnits,
@@ -21,6 +25,7 @@ import {
   unitDisplayName,
   unitStats,
   upgradeCost,
+  upgradePanel,
   type RaceId,
   type RosterDefinition,
   type UnitId,
@@ -295,19 +300,34 @@ describe('economy — one source of truth for cost (AC 8)', () => {
     expect(killBounty(spearman)).toBe(5);
   });
 
-  it('the shop offers the unowned units a race may field, in id order, at most eight', () => {
+  it('the shop offers every unowned unit a race may field, in id order, its exclusive included', () => {
     const offers = shopOffers(defaultSave().ownedUnits, 'race1');
-    expect(offers).toHaveLength(8);
+    expect(offers).toHaveLength(availableUnits('race1').length - defaultSave().ownedUnits.length);
     expect(offers).toEqual([...offers].sort((a, b) => a - b));
+    expect(offers).toContain(ROSTER.races.race1.exclusive);
     for (const unit of offers) {
       expect(defaultSave().ownedUnits).not.toContain(unit);
       expect(isAvailable(unit, 'race1')).toBe(true);
     }
-    const everything = shopOffers([], 'race1');
-    expect(everything).toHaveLength(8);
+    expect(shopOffers([], 'race1')).toEqual(availableUnits('race1'));
     const nearlyAll = shopOffers(availableUnits('race1').slice(0, 12), 'race1');
     expect(nearlyAll).toHaveLength(2);
     expect(nearlyAll).toContain(ROSTER.races.race1.exclusive);
+  });
+
+  it('the army rack holds eight unit types', () => {
+    expect(ARMY_SLOTS).toBe(8);
+    expect(hasArmySlot([0, 1, 2])).toBe(true);
+    expect(hasArmySlot([0, 1, 2, 3, 4, 5, 6, 7])).toBe(false);
+  });
+
+  it('the upgrade panel lists the seven tracks in shop order with level and next cost', () => {
+    const panel = upgradePanel({ spear: 1, archery: -1 });
+    expect(panel.map((p) => p.track)).toEqual(['speed', 'armour', 'archery', 'spear', 'sword', 'halberd', 'axe']);
+    expect(panel.map((p) => p.cost)).toEqual([600, 600, 1000, 600, 450, 400, 400]);
+    expect(panel.find((p) => p.track === 'spear')).toEqual({ track: 'spear', level: 1, cost: 600 });
+    expect(upgradePanel(undefined).every((p) => p.level === 0)).toBe(true);
+    for (const track of UPGRADE_TRACK_IDS) expect(UPGRADE_TRACKS[track].label.length).toBeGreaterThan(0);
   });
 
   it('upgrade levels cost base × (1 + |level|)', () => {

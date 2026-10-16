@@ -94,7 +94,16 @@ describe('ScreenShell', () => {
     assertExactlyOneActive('map');
     await click('shop');
     assertExactlyOneActive('shop');
+    await click('guide');
+    assertExactlyOneActive('instructions');
     await click('back');
+    await click('campaign');
+    await click('shop');
+    await click('menu');
+    assertExactlyOneActive('menu');
+    await click('campaign');
+    await click('shop');
+    await click('continue');
     assertExactlyOneActive('map');
     await click('pick-race:race3');
     await click('attack:r12');

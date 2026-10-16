@@ -110,21 +110,30 @@ export interface UnitDefinition {
   readonly sprite: string;
 }
 
-/** Upgrade tracks (rules §9): the next level costs `baseCost × (1 + |level|)`. */
+/**
+ * Upgrade tracks (rules §9): the next level costs `baseCost × (1 + |level|)`
+ * and there is no level cap. `label` is the document's shop text for the
+ * track (a mechanic name, not a setting name, so it may live with the data).
+ */
 export interface UpgradeTrackDefinition {
   readonly baseCost: number;
+  /** The track's name as the shop panel shows it (rules §9 "Shop text"). */
+  readonly label: string;
   /** What one level does, as the shop describes it. */
   readonly effect: string;
 }
 
+/** The seven tracks in the order the shop panel lists them (rules §9). */
+export const UPGRADE_TRACK_IDS = ['speed', 'armour', 'archery', 'spear', 'sword', 'halberd', 'axe'] as const satisfies readonly UpgradeTrack[];
+
 export const UPGRADE_TRACKS: Readonly<Record<UpgradeTrack, UpgradeTrackDefinition>> = {
-  speed: { baseCost: 600, effect: 'movement and shove ×(1 + level/10)' },
-  armour: { baseCost: 600, effect: '+10 hit points on every unit at spawn' },
-  archery: { baseCost: 500, effect: 'projectile drift reduced by 1' },
-  spear: { baseCost: 300, effect: '+5 power on spear strikes' },
-  sword: { baseCost: 450, effect: '+5 power on sword strikes' },
-  halberd: { baseCost: 400, effect: '+5 power on halberd strikes' },
-  axe: { baseCost: 400, effect: '+5 power on axe strikes' },
+  speed: { baseCost: 600, label: 'Speed Training (+1)', effect: 'movement and shove ×(1 + level/10)' },
+  armour: { baseCost: 600, label: 'Increased Armour (+10)', effect: '+10 hit points on every unit at spawn' },
+  archery: { baseCost: 500, label: 'Marksmanship (+1)', effect: 'projectile drift reduced by 1' },
+  spear: { baseCost: 300, label: 'Spear Training (+5)', effect: '+5 power on spear strikes' },
+  sword: { baseCost: 450, label: 'Swordsmanship (+5)', effect: '+5 power on sword strikes' },
+  halberd: { baseCost: 400, label: 'Halberd Training (+5)', effect: '+5 power on halberd strikes' },
+  axe: { baseCost: 400, label: 'Axe Training (+5)', effect: '+5 power on axe strikes' },
 };
 
 export type PaletteId = 'blue' | 'orange' | 'sky' | 'green' | 'purple' | 'yellow' | 'vermilion';

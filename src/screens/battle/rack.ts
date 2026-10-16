@@ -9,13 +9,10 @@ import type { FrameState, Side } from '../../battle';
 import { CONTESTED_COLOUR } from '../../campaign';
 import { unitName } from '../../names';
 import { raceVisuals, referencedAtlases, unitDisplayName, unitStats, type RaceId, type UnitId } from '../../roster';
+import { buildPortrait, type AtlasJson } from '../../ui/portrait';
 import { RACK_GAP, rackGrid } from './layout';
 
-/** The atlas json as PlayCanvas parses it: frames keyed by name with a rect in grid units. */
-export interface AtlasJson {
-  readonly texture: string;
-  readonly frames: Readonly<Record<string, { readonly rect: readonly [number, number, number, number] }>>;
-}
+export type { AtlasJson } from '../../ui/portrait';
 
 export interface RackOptions {
   readonly side: Side;
@@ -81,7 +78,7 @@ export function buildRack(parent: HTMLElement, options: RackOptions): Rack {
     b.title = name;
     b.style.width = `${grid.buttonWidth}px`;
     b.style.height = `${grid.buttonHeight}px`;
-    const portrait = buildPortrait(unit, visuals.frame(unit), visuals.tint, options.atlas, options.atlasImage, name);
+    const portrait = buildPortrait(unit, visuals.frame(unit), visuals.tint, { atlas: options.atlas, atlasImage: options.atlasImage }, name);
     const label = document.createElement('span');
     label.className = 'name';
     label.dataset.role = 'unit-name';
@@ -117,43 +114,4 @@ export function buildRack(parent: HTMLElement, options: RackOptions): Rack {
   };
 
   return { root, update };
-}
-
-function buildPortrait(
-  unit: UnitId,
-  frameName: string,
-  tint: string,
-  atlas: AtlasJson | null,
-  atlasImage: string | null,
-  name: string,
-): HTMLSpanElement {
-  const portrait = document.createElement('span');
-  portrait.className = 'portrait';
-  portrait.dataset.role = 'portrait';
-  portrait.dataset.frame = frameName;
-  portrait.style.background = tint;
-  const frame = atlas?.frames[frameName];
-  if (frame && atlasImage) {
-    const [col, row, w, h] = frame.rect;
-    const cols = Math.max(...Object.values(atlas.frames).map((f) => f.rect[0] + f.rect[2]));
-    const rows = Math.max(...Object.values(atlas.frames).map((f) => f.rect[1] + f.rect[3]));
-    const img = document.createElement('span');
-    img.className = 'sprite';
-    img.style.backgroundImage = `url(${atlasImage})`;
-    img.style.backgroundSize = `${(cols / w) * 100}% ${(rows / h) * 100}%`;
-    img.style.backgroundPosition = `${cols - w > 0 ? (col / (cols - w)) * 100 : 0}% ${rows - h > 0 ? (row / (rows - h)) * 100 : 0}%`;
-    portrait.appendChild(img);
-  }
-  const initial = document.createElement('span');
-  initial.className = 'initial';
-  initial.textContent = initialsOf(name, unit);
-  portrait.appendChild(initial);
-  return portrait;
-}
-
-/** A two-letter glyph so a portrait is identifiable while the atlas is a placeholder. */
-function initialsOf(name: string, unit: UnitId): string {
-  const words = name.split(/\s+/).filter(Boolean);
-  const last = words[words.length - 1] ?? String(unit);
-  return last.slice(0, 2).toUpperCase();
 }

@@ -605,7 +605,7 @@ export class ReferenceBattle implements BattleSimulation {
 }
 
 function summary(setup: SideSetup): FrameState['sides']['left'] {
-  return { race: setup.race, army: setup.army, control: setup.control };
+  return { race: setup.race, army: setup.army, control: setup.control, upgrades: { ...(setup.upgrades ?? {}) }, statBonus: setup.statBonus ?? 1 };
 }
 
 /** Create the simulation for a configured battle. */
