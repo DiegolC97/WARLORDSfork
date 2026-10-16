@@ -57,3 +57,10 @@ What: Shop and battle placeholders call `unitDisplayName`, `shopPrice`, `killBou
 **Why:** the work order makes the simulation the seam every other slice depends on: zoom and art must change underneath it without touching a rule, which an automated boundary guarantees better than review.
 **Where:** `.dependency-cruiser.cjs`; verified on 2026-10-16 by injecting an engine, a screen and a PlayCanvas import into `src/battle/simulation.ts` — each was reported — and removing them.
 **Learned:** test hooks that need the DOM (like `handle.ts`) may use DOM *types* but must not import screen modules.
+
+## Unit portraits come from one helper in src/ui/portrait.ts, used by both racks
+
+**What:** `buildPortrait(unit, frame, tint, { atlas, atlasImage }, name)` draws a unit's race-atlas frame over the race tint with a two-letter glyph; `atlasAssetId(url)` names the manifest entry and `atlasFromAssets(ctx.assets, url)` reads the parsed atlas back (null headless). The battle rack (`src/screens/battle/rack.ts`) and the shop rack (`src/screens/shop/index.ts`) both import it; screens may not import each other, so shared presentation lives under `src/ui/`.
+**Why:** the shop needed the battle rack's portraits, and a cross-screen import is forbidden by dependency-cruiser.
+**Where:** `src/ui/portrait.ts`; each screen declares `referencedAtlases().map(url => ({ id: atlasAssetId(url), type: 'json', url }))` as its manifest.
+**Learned:** 2026-10-16. `FrameState.sides[side]` now also carries `upgrades` and `statBonus`, so a test can assert the power a side's strikes resolve at (`attackPowers`) from the simulation it actually runs.

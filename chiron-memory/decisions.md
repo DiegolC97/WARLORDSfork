@@ -152,3 +152,10 @@ What: `scripts/check-roster.mjs` creates a Vite dev server in middleware mode, c
 **Why:** the work order's acceptance criterion requires termination on the same tick the limit is reached, with no further ticks processed.
 **Where:** `src/battle/simulation.ts` (`tickBar`), `src/battle/types.ts` (`POINTS_TO_WIN`), tests "a 25-point lead…" in `src/battle/simulation.test.ts`.
 **Learned:** 2026-10-16. Any test that watches the bar move 1 px per frame must stop at the decision tick, where it snaps.
+
+## The shop lists every unowned unit a race may field; the document's eight-entry cap is dropped
+
+**What:** `shopOffers(owned, race)` returns every unit the race may field and does not own, in id order, with no `.slice(0, 8)`. The army rack is capped instead: `ARMY_SLOTS = 8` / `hasArmySlot(owned)`; with eight unit types owned the shop shows no buy slot and states "Army is full". The strategy guide control on the shop routes to the instructions screen (`shop --guide--> instructions`); Continue goes to the map and Main menu to the menu.
+**Why:** rules §11 caps the "Buy Unit" panel at eight entries, which with the original's ten generics always left room for the race's exclusive. The remake has thirteen generics, so the cap would hide the Giant Troll from a new race4 player and fail the work order's criterion. No approved external URL exists for the guide, so it opens the in-game guide.
+**Where:** `src/roster/roster.ts` (`shopOffers`, `ARMY_SLOTS`, `hasArmySlot`, `upgradePanel`), `src/roster/data.ts` (`UPGRADE_TRACK_IDS`, per-track `label` = §9 shop text), `src/shell/routes.ts`, `src/screens/shop/index.ts`, tests in `src/screens/shop/shop.test.ts`.
+**Learned:** 2026-10-16. The reference screenshot (500 gold; 600/600/1000/600 greyed, 450/400/400 buyable) is Spear at level 1 and Archery at −1 under `base × (1 + |level|)`; the test seeds that state in the save before boot, since a race pick overwrites `upgradeLevels`.
