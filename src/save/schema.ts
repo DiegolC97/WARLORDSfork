@@ -71,7 +71,11 @@ export interface CampaignSave {
   chosenRace: RaceId | null;
   /** Ids of the units the player owns. */
   ownedUnits: number[];
-  /** Level of each upgrade, keyed by upgrade id. */
+  /**
+   * Level of each upgrade track, keyed by track id. Signed: a race's
+   * handicap track starts at −1 (set when the race is picked) and the shop
+   * climbs from there. A missing track is level 0.
+   */
   upgradeLevels: Record<string, number>;
   /**
    * Owner of each region, keyed by region id: `'player'`, a race id, or
@@ -127,6 +131,8 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const isNonNegativeInt = (v: unknown): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
+const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
+
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 
 /**
@@ -157,8 +163,8 @@ export function validateSave(
   if (!Array.isArray(value.ownedUnits) || !value.ownedUnits.every(isNonNegativeInt)) {
     return fail('ownedUnits is not an array of non-negative integers');
   }
-  if (!isRecord(value.upgradeLevels) || !Object.values(value.upgradeLevels).every(isNonNegativeInt)) {
-    return fail('upgradeLevels is not a map of non-negative integers');
+  if (!isRecord(value.upgradeLevels) || !Object.values(value.upgradeLevels).every(isInt)) {
+    return fail('upgradeLevels is not a map of integers');
   }
   if (
     !isRecord(value.regionOwners) ||

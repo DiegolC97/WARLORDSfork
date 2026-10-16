@@ -22,11 +22,28 @@ export const BATTLE_LENGTH_FRAMES = 7200;
 export const KILLS_PER_CHARGE = 20;
 /** Frames the result panel waits before continuing on its own (§5.4). */
 export const RESULT_AUTO_CONTINUE_FRAMES = 240;
+/** Frames a dead body lies at full opacity before it starts to fade (§7.4). */
+export const BODY_FRAMES = 500;
+/** Opacity a fading body loses per frame; it is removed on reaching 0 (§7.4). */
+export const FADE_PER_FRAME = 0.01;
+/** Knockback per landed strike is `min(power, MAX_KNOCKBACK)` (§7.3). */
+export const MAX_KNOCKBACK = 50;
+/** Field units above the feet a projectile leaves from (§8.4). */
+export const PROJECTILE_LAUNCH_HEIGHT = 66;
+/**
+ * The box a projectile must overlap to hit its target, in field units from
+ * the target's feet. The document gives no sprite size; this is an
+ * assumption sized so a straight shot always connects and a drifted one can
+ * sail over or fall short, which is what Archery as "accuracy" needs.
+ */
+export const UNIT_HITBOX = { halfWidth: 40, height: 140 } as const;
 
 /** The territory bar: 700 px wide, 14 px per point, a 25-point lead fills it (§5.2). */
 export const BAR_WIDTH = 700;
 export const BAR_PIXELS_PER_POINT = 14;
 export const BAR_CENTRE = BAR_WIDTH / 2;
+/** The lead in crossings that fills the bar and wins at once: 25. */
+export const POINTS_TO_WIN = BAR_CENTRE / BAR_PIXELS_PER_POINT;
 
 /** Field geometry in field units (§2). Lane 1 is the top lane. */
 export const FIELD = {
@@ -39,6 +56,9 @@ export const FIELD = {
   /** Horizontal extent used to map field x to the screen (exit to exit). */
   minX: -50,
   maxX: 2900,
+  /** A projectile is removed once past either of these (§2). */
+  projectileMinX: -50,
+  projectileMaxX: 2850,
   /** Field y of a lane: 600 + 150 × lane. */
   laneY: (lane: number): number => 600 + 150 * lane,
   minY: 750,
@@ -75,20 +95,49 @@ export interface SpawnerState {
 
 export type UnitPhase = 'walk' | 'attack' | 'dead';
 
+/**
+ * The animation a unit is playing, by name: its walk cycle, one of its
+ * swipes (`swipe-1` is the first attack in the roster's list) or its death.
+ * The renderer maps these onto art; the simulation never sees a sprite.
+ */
+export type ClipName = 'walk' | `swipe-${number}` | 'death';
+
 export interface UnitState {
   /** Unique within the battle. */
   readonly id: number;
   readonly side: Side;
   readonly unit: UnitId;
+  /** The race fielding the unit, or `null` for the contested host. */
+  readonly race: RaceId | null;
   readonly lane: number;
   /** Field x. */
   readonly x: number;
   readonly hp: number;
   readonly maxHp: number;
   readonly phase: UnitPhase;
-  readonly retreating: boolean;
   /** +1 when walking toward the right edge, −1 toward the left. */
   readonly facing: 1 | -1;
+  /** The clip playing this frame. */
+  readonly clip: ClipName;
+  /** Frame offset within `clip` that this tick processed; a strike lands when it equals the swipe's strike frame. */
+  readonly clipFrame: number;
+  /** Opacity: 1 while alive and while the body lies; then fading by `FADE_PER_FRAME` per frame to removal. */
+  readonly alpha: number;
+}
+
+/** A blow that landed this tick (§7.3, §8.3, §8.4). */
+export interface HitEvent {
+  /** Unit whose strike or projectile landed. */
+  readonly by: number;
+  readonly target: number;
+  readonly kind: 'melee' | 'projectile';
+  /** The power the blow resolved at; the damage roll is 0…power−1. */
+  readonly power: number;
+  readonly damage: number;
+  /** Signed field units the target was pushed. */
+  readonly knockback: number;
+  /** True when this blow killed the target. */
+  readonly killed: boolean;
 }
 
 export interface ProjectileState {
@@ -96,8 +145,12 @@ export interface ProjectileState {
   readonly side: Side;
   readonly lane: number;
   readonly x: number;
+  /** Field units above the lane's baseline; launched at `PROJECTILE_LAUNCH_HEIGHT`, then drifting. */
+  readonly y: number;
   readonly kind: 'arrow' | 'axe' | 'javelin' | 'magic';
   readonly facing: 1 | -1;
+  /** The unit that fired it. */
+  readonly firer: number;
 }
 
 export type WinReason = 'bar' | 'time' | 'surrender';
@@ -110,7 +163,9 @@ export interface SideSummary {
 }
 
 export interface FrameState {
-  /** Frames simulated so far. */
+  /** The seed the battle runs on; the same seed and commands replay it exactly. */
+  readonly seed: number;
+  /** Frames simulated so far; stops advancing once a winner is decided. */
   readonly tick: number;
   /** Frames left on the clock; 0 once time is up (the battle may continue in sudden death). */
   readonly framesLeft: number;
@@ -118,7 +173,11 @@ export interface FrameState {
   readonly rightScore: number;
   /** Where the bar is heading: `BAR_CENTRE + BAR_PIXELS_PER_POINT × (left − right)`. */
   readonly barTarget: number;
-  /** Where the bar is drawn this frame; it moves 1 px per frame toward the target. */
+  /**
+   * Where the bar is drawn this frame: it moves 1 px per frame toward the
+   * target, and snaps to the full or empty end on the tick the lead decides
+   * the battle.
+   */
   readonly barWidth: number;
   readonly winner: Side | null;
   readonly winReason: WinReason | null;
@@ -128,6 +187,8 @@ export interface FrameState {
   readonly spawners: Readonly<Record<Side, SpawnerState>>;
   readonly units: readonly UnitState[];
   readonly projectiles: readonly ProjectileState[];
+  /** Every blow that landed on this tick, in the order it was resolved. */
+  readonly hits: readonly HitEvent[];
 }
 
 export interface SideSetup {
@@ -149,14 +210,21 @@ export interface BattleConfig {
   readonly right: SideSetup;
   /** Defaults to `BATTLE_LENGTH_FRAMES`. */
   readonly lengthFrames?: number;
-  /** Source of uniform floats in [0, 1); `Math.random` in the game, seeded in tests. */
-  readonly rng?: () => number;
+  /**
+   * Seed of the battle's only random source (see `rng.ts`). Two battles with
+   * the same seed and the same commands on the same ticks are identical;
+   * omitted, the battle draws one and reports it in every snapshot.
+   */
+  readonly seed?: number;
 }
 
 /** The simulation as the screen sees it. */
 export interface BattleSimulation {
   snapshot(): FrameState;
-  /** Advance one frame. */
+  /**
+   * Advance one frame. Once a winner is decided the battle is over: the
+   * call does nothing and the snapshot stays as it was on the deciding tick.
+   */
   tick(): void;
   /** Apply a command to a side's spawner; returns whether it did anything. */
   command(side: Side, command: SpawnerCommand): boolean;

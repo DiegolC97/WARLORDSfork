@@ -9,26 +9,17 @@ import {
   INITIAL_LANE,
   KILLS_PER_CHARGE,
   LANE_COUNT,
+  POINTS_TO_WIN,
+  FIELD,
   type BattleConfig,
   type BattleSimulation,
+  type FrameState,
 } from './types';
-
-/** mulberry32: a small seeded generator so battles replay exactly. */
-function seeded(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 const humans = (overrides: Partial<BattleConfig> = {}): BattleConfig => ({
   left: { race: 'race1', army: [0, 1, 2], control: 'human' },
   right: { race: 'race2', army: [0, 1, 2], control: 'human' },
-  rng: seeded(1),
+  seed: 1,
   ...overrides,
 });
 
@@ -146,7 +137,7 @@ describe('scoring and the territory bar (rules §5)', () => {
   });
 
   it('the bar target always equals centre + 14 × (left − right) and the drawn width follows it 1 px per frame', () => {
-    const sim = createBattle(humans({ rng: seeded(7) }));
+    const sim = createBattle(humans({ seed: 7 }));
     let previous = sim.snapshot().barWidth;
     let moved = false;
     for (let i = 0; i < 3000; i++) {
@@ -154,6 +145,7 @@ describe('scoring and the territory bar (rules §5)', () => {
       if (sim.snapshot().spawners.left.canRelease) sim.command('left', 'release');
       if (sim.snapshot().spawners.right.canRelease && i % 3 === 0) sim.command('right', 'release');
       const s = sim.snapshot();
+      if (s.winner) break; // the width snaps to the end on the deciding tick
       expect(s.barTarget).toBe(BAR_CENTRE + BAR_PIXELS_PER_POINT * (s.leftScore - s.rightScore));
       const delta = s.barWidth - previous;
       expect(Math.abs(delta)).toBeLessThanOrEqual(1);
@@ -166,20 +158,45 @@ describe('scoring and the territory bar (rules §5)', () => {
     expect(moved).toBe(true);
   });
 
-  it('a 25-point lead fills the bar and wins instantly', () => {
+  it('a 25-point lead fills the bar and wins on that same tick, after which no tick is processed (work order AC 6)', () => {
     const sim = createBattle(humans());
-    let frames = 0;
-    while (sim.snapshot().winner === null && frames < BATTLE_LENGTH_FRAMES) {
+    let decidingTick: number | null = null;
+    for (let i = 0; i < BATTLE_LENGTH_FRAMES && decidingTick === null; i++) {
       sim.tick();
-      frames++;
-      if (sim.snapshot().spawners.left.canRelease) sim.command('left', 'release');
+      const s = sim.snapshot();
+      const lead = s.leftScore - s.rightScore;
+      if (lead >= POINTS_TO_WIN) {
+        decidingTick = s.tick;
+        // Decided on this very tick, not a frame later.
+        expect(s.winner).toBe('left');
+        expect(s.winnerTick).toBe(s.tick);
+      } else {
+        expect(s.winner).toBeNull();
+      }
+      if (s.spawners.left.canRelease) sim.command('left', 'release');
     }
+    expect(decidingTick).not.toBeNull();
     const s = sim.snapshot();
-    expect(s.winner).toBe('left');
     expect(s.winReason).toBe('bar');
     expect(s.barWidth).toBe(BAR_WIDTH);
-    expect(s.leftScore - s.rightScore).toBeGreaterThanOrEqual(25);
+    expect(s.leftScore - s.rightScore).toBe(POINTS_TO_WIN);
     expect(s.framesLeft).toBeGreaterThan(0);
+    // The clock stops: further ticks change nothing.
+    ticks(sim, 100);
+    expect(sim.snapshot()).toEqual(s);
+    expect(sim.snapshot().tick).toBe(decidingTick);
+  });
+
+  it('the right side wins the same way when its lead reaches 25, with the bar snapped empty', () => {
+    const sim = createBattle(humans());
+    while (sim.snapshot().winner === null && sim.snapshot().tick < BATTLE_LENGTH_FRAMES) {
+      sim.tick();
+      if (sim.snapshot().spawners.right.canRelease) sim.command('right', 'release');
+    }
+    const s = sim.snapshot();
+    expect(s).toMatchObject({ winner: 'right', winReason: 'bar', barWidth: 0 });
+    expect(s.rightScore - s.leftScore).toBe(POINTS_TO_WIN);
+    expect(s.winnerTick).toBe(s.tick);
   });
 });
 
@@ -213,6 +230,32 @@ describe('the five-minute timer (rules §5.3)', () => {
     sim.command('left', 'release');
     ticks(sim, 1200);
     expect(sim.snapshot().winner).toBe('left');
+  });
+
+  it('a full-length battle with neither bar limit reached ends at tick 7200 for the higher score; equal scores play on into sudden death (work order AC 7)', () => {
+    // One crossing each, early, then nothing: a tie at the bell.
+    const sim = createBattle(humans());
+    ticks(sim, SPEARMAN_RECHARGE);
+    sim.command('left', 'release');
+    sim.command('right', 'lane-up');
+    sim.command('right', 'release');
+    ticks(sim, BATTLE_LENGTH_FRAMES - SPEARMAN_RECHARGE);
+    let s = sim.snapshot();
+    expect(s.tick).toBe(BATTLE_LENGTH_FRAMES);
+    expect([s.leftScore, s.rightScore]).toEqual([1, 1]);
+    expect(s.framesLeft).toBe(0);
+    expect(s.winner).toBeNull();
+    // Sudden death: the clock stays at zero, the battle runs on, and the next crossing decides it.
+    ticks(sim, 10);
+    s = sim.snapshot();
+    expect(s.tick).toBe(BATTLE_LENGTH_FRAMES + 10);
+    expect(s.framesLeft).toBe(0);
+    expect(s.winner).toBeNull();
+    sim.command('right', 'release');
+    ticks(sim, 1200);
+    s = sim.snapshot();
+    expect(s).toMatchObject({ winner: 'right', winReason: 'time', leftScore: 1, rightScore: 2 });
+    expect(s.winnerTick).toBeLessThan(BATTLE_LENGTH_FRAMES + 1200);
   });
 
   it('no unit spawns once a winner is decided', () => {
@@ -251,7 +294,7 @@ describe('kills, bounties and the charge (rules §4, §8.3)', () => {
 
   it('kills credit the killer: kills, bounty gold and charge kills rise together', () => {
     const sim = createBattle(
-      humans({ right: { race: 'race2', army: [7], control: 'human' }, lengthFrames: 100000, rng: seeded(3) }),
+      humans({ right: { race: 'race2', army: [7], control: 'human' }, lengthFrames: 100000, seed: 3 }),
     );
     bankKills(sim, 3);
     const s = sim.snapshot().spawners.left;
@@ -262,7 +305,7 @@ describe('kills, bounties and the charge (rules §4, §8.3)', () => {
 
   it('the charge arms at twenty kills and releases eight units, one in each lane', () => {
     const sim = createBattle(
-      humans({ right: { race: 'race2', army: [7], control: 'human' }, lengthFrames: 100000, rng: seeded(5) }),
+      humans({ right: { race: 'race2', army: [7], control: 'human' }, lengthFrames: 100000, seed: 5 }),
     );
     expect(sim.command('left', 'charge')).toBe(false);
     bankKills(sim, KILLS_PER_CHARGE);
@@ -290,5 +333,149 @@ describe('the computer opponent (rules §13)', () => {
     expect(s.units.filter((u) => u.side === 'right').length).toBeGreaterThan(0);
     expect(s.spawners.right.lane).toBeGreaterThanOrEqual(1);
     expect(s.spawners.right.lane).toBeLessThanOrEqual(LANE_COUNT);
+  });
+});
+
+describe('determinism (work order AC 1)', () => {
+  /** A scripted input stream: commands applied to the simulation at given ticks. */
+  const script: readonly { tick: number; side: 'left' | 'right'; command: 'lane-up' | 'lane-down' | 'next-unit' | 'release' | 'charge' }[] = [
+    { tick: 10, side: 'left', command: 'lane-up' },
+    { tick: 20, side: 'right', command: 'lane-down' },
+    { tick: 60, side: 'left', command: 'release' },
+    { tick: 80, side: 'right', command: 'release' },
+    { tick: 140, side: 'left', command: 'next-unit' },
+    { tick: 150, side: 'left', command: 'release' },
+    { tick: 200, side: 'right', command: 'next-unit' },
+    { tick: 240, side: 'right', command: 'release' },
+    { tick: 1000, side: 'left', command: 'charge' },
+  ];
+
+  const run = (seed: number) => {
+    const sim = createBattle({
+      left: { race: 'race1', army: [0, 1, 2, 11], control: 'human' },
+      right: { race: 'race2', army: [0, 1, 2, 13], control: 'ai' },
+      seed,
+    });
+    const frames: string[] = [];
+    for (let t = 1; t <= BATTLE_LENGTH_FRAMES; t++) {
+      for (const step of script) if (step.tick === t) sim.command(step.side, step.command);
+      // Keep both spawners busy so the field is crowded and every rule gets exercised.
+      if (t % 7 === 0 && sim.snapshot().spawners.left.canRelease) sim.command('left', 'release');
+      sim.tick();
+      frames.push(JSON.stringify(sim.snapshot()));
+    }
+    return frames;
+  };
+
+  it('two runs of 7200 ticks from the same seed and the same scripted inputs produce identical frame snapshots', () => {
+    const a = run(42);
+    const b = run(42);
+    expect(a.length).toBe(BATTLE_LENGTH_FRAMES);
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) throw new Error(`snapshots differ first at tick ${i + 1}`);
+    // The battle was eventful, not a trivially equal pair of empty fields.
+    const last = JSON.parse(a[a.length - 1]!) as FrameState;
+    expect(last.spawners.left.kills + last.spawners.right.kills + last.leftScore + last.rightScore).toBeGreaterThan(0);
+  }, 60000);
+
+  it('a different seed produces a different battle, and the seed is reported in every snapshot', () => {
+    const a = run(42);
+    const c = run(43);
+    expect(a).not.toEqual(c);
+    expect((JSON.parse(a[0]!) as FrameState).seed).toBe(42);
+  }, 60000);
+
+  it('once a winner is decided the clock stops and later ticks leave the snapshot untouched', () => {
+    const sim = createBattle(humans());
+    sim.tick();
+    sim.surrender('left');
+    const decided = sim.snapshot();
+    ticks(sim, 50);
+    expect(sim.snapshot()).toEqual(decided);
+    expect(sim.snapshot().tick).toBe(1);
+  });
+});
+
+describe('unopposed crossing (rules §2; work order AC 2)', () => {
+  const SPEARMAN = unitStats(0);
+  const distance = FIELD.leftExitX - FIELD.leftSpawnX;
+  /** Ticks a Spearman needs at the slowest and fastest spawn jitter: speed 5 … 5.5, scoring once past 2900. */
+  const slowest = Math.floor(distance / SPEARMAN.speed) + 1;
+  const fastest = Math.ceil(distance / (SPEARMAN.speed + 0.5));
+
+  const crossingTicks = (seed: number) => {
+    const sim = createBattle(humans({ seed }));
+    ticks(sim, SPEARMAN.recharge);
+    sim.command('left', 'release');
+    const released = sim.snapshot().tick;
+    for (let i = 0; i < 1000; i++) {
+      sim.tick();
+      if (sim.snapshot().leftScore === 1) return sim.snapshot().tick - released;
+    }
+    throw new Error('the Spearman never crossed');
+  };
+
+  it('a Spearman alone in an empty lane scores in about 570 ticks, within the spawn speed jitter', () => {
+    expect(slowest).toBe(571);
+    expect(fastest).toBe(519);
+    const results = Array.from({ length: 40 }, (_, seed) => crossingTicks(seed + 1));
+    for (const t of results) {
+      expect(t).toBeLessThanOrEqual(slowest);
+      expect(t).toBeGreaterThanOrEqual(fastest);
+    }
+    // The jitter is real: not every run takes the same time, and the slowest sits at the document's figure.
+    expect(new Set(results).size).toBeGreaterThan(5);
+    expect(Math.max(...results)).toBeGreaterThanOrEqual(560);
+  });
+
+  it('a crossing removes the unit and scores exactly one point whatever the unit type', () => {
+    for (const unit of [0, 7, 16] as const) {
+      const sim = createBattle(humans({ left: { race: 'race4', army: [unit], control: 'human' }, seed: 2 }));
+      ticks(sim, unitStats(unit).recharge);
+      sim.command('left', 'release');
+      ticks(sim, 1500);
+      expect(sim.snapshot().units).toHaveLength(0);
+      expect(sim.snapshot().leftScore).toBe(1);
+    }
+  });
+});
+
+describe('bounty and the charge meter in a scripted scenario (rules §4, §8.3; work order AC 8)', () => {
+  it('each kill of a 250-gold unit credits exactly 5 gold, and the 20th kill arms the charge', () => {
+    expect(unitStats(0).cost).toBe(250);
+    // Trolls hold lane 4 against a stream of Spearmen; every Spearman killed is worth ceil(250 / 50) = 5.
+    const sim = createBattle({
+      left: { race: 'race4', army: [16], control: 'human', upgrades: { armour: 20 } },
+      right: { race: 'race2', army: [0], control: 'human' },
+      seed: 12,
+    });
+    let kills = 0;
+    let armedOnKill: number | null = null;
+    for (let t = 0; t < 6000 && armedOnKill === null; t++) {
+      sim.tick();
+      const s = sim.snapshot();
+      if (s.winner) throw new Error(`battle ended at tick ${s.tick} with ${kills} kills`);
+      const killed = s.hits.filter((h) => h.killed).length;
+      kills += killed;
+      // Gold follows kills exactly, 5 per Spearman, and the charge counter follows kills.
+      expect(s.spawners.left.kills).toBe(kills);
+      expect(s.spawners.left.gold).toBe(kills * 5);
+      expect(s.spawners.left.chargeKills).toBe(kills);
+      if (kills < KILLS_PER_CHARGE) expect(s.spawners.left.chargeReady).toBe(false);
+      if (killed > 0 && kills >= KILLS_PER_CHARGE && armedOnKill === null) {
+        armedOnKill = kills;
+        // Armed on the 20th kill: the charge needs only the recharge to be complete.
+        expect(s.spawners.left.chargeReady).toBe(s.spawners.left.canRelease);
+      }
+      if (s.spawners.right.canRelease) sim.command('right', 'release');
+      if (s.spawners.left.canRelease && s.spawners.left.chargeKills < KILLS_PER_CHARGE) sim.command('left', 'release');
+    }
+    expect(armedOnKill).toBe(KILLS_PER_CHARGE);
+    expect(sim.snapshot().spawners.left.gold).toBe(100);
+    while (!sim.snapshot().spawners.left.canRelease) sim.tick();
+    expect(sim.snapshot().spawners.left.chargeReady).toBe(true);
+    expect(sim.command('left', 'charge')).toBe(true);
+    const after = sim.snapshot();
+    expect(after.spawners.left.chargeKills).toBe(0);
+    expect(after.units.filter((u) => u.side === 'left' && u.x === FIELD.leftSpawnX).map((u) => u.lane).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 });

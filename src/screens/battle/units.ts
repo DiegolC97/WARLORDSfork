@@ -8,7 +8,7 @@
  */
 import type { FrameState, Side } from '../../battle';
 import { raceVisuals, type RaceId } from '../../roster';
-import { fieldX, laneY } from './layout';
+import { fieldHeight, fieldX, laneY } from './layout';
 
 export interface UnitLayer {
   readonly root: HTMLDivElement;
@@ -57,9 +57,12 @@ export function buildUnitLayer(parent: HTMLElement, races: Readonly<Record<Side,
       el.style.zIndex = String(u.lane);
       el.dataset.x = u.x.toFixed(0);
       el.dataset.phase = u.phase;
+      el.dataset.clip = u.clip;
+      el.dataset.clipFrame = String(u.clipFrame);
+      // A body fades out as the simulation says; the art slice maps clip and frame onto sprites.
+      el.style.opacity = u.alpha < 1 ? u.alpha.toFixed(2) : '';
       el.classList.toggle('dead', u.phase === 'dead');
       el.classList.toggle('attacking', u.phase === 'attack');
-      el.classList.toggle('retreating', u.retreating);
       el.classList.toggle('flipped', u.facing === -1);
       hp.style.width = `${Math.max(0, Math.min(100, (u.hp / u.maxHp) * 100)).toFixed(0)}%`;
     }
@@ -82,7 +85,7 @@ export function buildUnitLayer(parent: HTMLElement, races: Readonly<Record<Side,
         projectiles.set(p.id, el);
       }
       el.style.left = `${fieldX(p.x).toFixed(1)}px`;
-      el.style.top = `${laneY(p.lane) - 16}px`;
+      el.style.top = `${(laneY(p.lane) - fieldHeight(p.y)).toFixed(1)}px`;
       el.classList.toggle('flipped', p.facing === -1);
     }
     for (const [id, el] of projectiles) {

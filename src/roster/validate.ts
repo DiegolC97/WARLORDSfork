@@ -8,7 +8,7 @@
  * `public/`), so the check never touches the file system itself.
  */
 import { EXCLUSIVE_UNIT_NAMES, RACE_UNIT_PREFIX, UNIT_NAMES, raceName, unitName } from '../names';
-import { ROSTER, UNIT_IDS, type RosterDefinition, type UnitId } from './data';
+import { ROSTER, UNIT_IDS, UPGRADE_TRACKS, type RosterDefinition, type UnitId } from './data';
 import { definedRaces, ownersOf, unitDisplayName } from './roster';
 
 export interface RosterError {
@@ -38,6 +38,16 @@ export function validateRoster(def: RosterDefinition = ROSTER, atlases: AtlasFra
       const names = owners.map((race) => `${raceName(race)} (${race})`).join(' and ');
       err(String(unit), `${label(unit)} is exclusive to more than one race: ${names}`);
     }
+  }
+
+  // Handicaps: a known track, and a different one for every race.
+  const handicapOwners = new Map<string, string>();
+  for (const race of races) {
+    const track = def.races[race].handicap;
+    if (!(track in UPGRADE_TRACKS)) err(race, `${raceName(race)} (${race}) has an unknown handicap track "${track}"`);
+    const prior = handicapOwners.get(track);
+    if (prior) err(race, `${raceName(race)} (${race}) and ${raceName(prior as typeof race)} (${prior}) share the handicap track "${track}"`);
+    handicapOwners.set(track, race);
   }
 
   // Starters: defined, distinct and generic.

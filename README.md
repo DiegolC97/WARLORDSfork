@@ -130,20 +130,36 @@ so colour is never the only cue.
 
 ### Battle
 
-`src/battle/` is the seam between the game's rules and the battle screen.
-`types.ts` defines the **frame snapshot** (`FrameState`: tick, frames left,
-scores, the territory bar's target and drawn width, the winner, each side's
-spawner — lane, selected unit, recharge progress, charge kills — and every
-unit and projectile on the field) and the **spawner commands** (`lane-up`,
-`lane-down`, `previous-unit`, `next-unit`, `release`, `charge`).
-`simulation.ts` (`createBattle`) is the reference implementation of the
-rules document's battle frame: spawner and recharge (§4), scoring, the
-territory bar and the five-minute timer (§5), the unit state machine with
-melee strikes, projectiles and kill credit (§7–8) and the computer opponent
-(§13). Every statistic comes from `src/roster`. It simplifies a few things
-for now — no projectile drift, corpses removed after a fixed time, the
-timer runs from the first frame, enemy difficulty upgrades not applied —
-which the combat slice refines behind the same snapshot type.
+`src/battle/` is the seam between the game's rules and the battle screen:
+a headless, deterministic simulation in field units and ticks (24 per
+second) that never imports rendering or engine code — dependency-cruiser's
+`battle-simulation-is-headless` rule fails the build if it ever does.
+
+`types.ts` defines the **frame snapshot** (`FrameState`: seed, tick, frames
+left, scores, the territory bar's target and drawn width, the winner, each
+side's spawner — lane, selected unit, recharge progress, charge kills, kills
+and gold — every unit with its race, lane, x, facing, hit points, the clip
+it plays (`walk`, `swipe-N`, `death`) and the frame of it, its opacity while
+its body fades, every projectile with its height, and the blows that landed
+this tick) and the **spawner commands** (`lane-up`, `lane-down`,
+`previous-unit`, `next-unit`, `release`, `charge`).
+
+`simulation.ts` (`createBattle`) implements the rules document's battle
+frame: spawner and recharge (§4), scoring, the territory bar and the
+five-minute timer with sudden death at a tie (§5), the unit state machine
+with strike-frame damage rolls of 0…power−1, knockback of min(power, 50),
+bodies that lie 500 frames then fade 1 % per frame (§7), projectiles that
+drift, hit only the firer's current target and leave the field at −50 / 2850
+(§8), the seven upgrade tracks as formulas over signed levels (§9,
+`upgrades.ts`) and the computer opponent (§13). Every statistic comes from
+`src/roster`; every roll comes from one seeded generator (`rng.ts`), so a
+seed plus the same commands on the same ticks replays a battle exactly. Once
+a winner is decided — the lead reaching 25, the clock, or surrender — the
+battle is over: `tick()` does nothing more. `quirks.ts` catalogues the
+document's nineteen engine quirks with the decision to preserve or fix each
+(the Spearman's shield bash is restored as a fourth swipe; the bar decides
+on the lead itself, on the same tick). Each race starts one upgrade track
+at −1 (`RaceDefinition.handicap`); the shop climbs out of it at double cost.
 
 The battle screen (`src/screens/battle/`) renders snapshots and sends
 commands back; it holds no rule. It is a DOM/SVG stage of the original's
@@ -183,8 +199,8 @@ In a campaign the save's `battleRegion` names the region under attack; the
 defenders come from the campaign rules. With no `battleRegion` (the
 two-player entry) both spawners are human and each side receives the
 roster's two-player army. When a winner is decided no more units spawn, the
-losing side retreats, the result panel appears (auto-continues after 240
-frames or on Continue) and the outcome is written to the save: `lastBattle`
+result panel appears (auto-continues after 240 rendered frames or on
+Continue) and the outcome is written to the save: `lastBattle`
 for the result screen, plus in a campaign the gold and kills earned and,
 on a victory, the region (`applyVictory`).
 

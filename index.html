@@ -113,10 +113,8 @@
       .battle .unit.flipped .body { border-radius: 3px 3px 1px 1px; }
       .battle .unit.attacking .body { transform: translateX(2px) skewX(-8deg); }
       .battle .unit.flipped.attacking .body { transform: translateX(-2px) skewX(8deg); }
-      .battle .unit.dead { opacity: 0.55; }
-      .battle .unit.dead .body { transform: rotate(80deg) translateY(6px); }
+      .battle .unit.dead .body { transform: rotate(80deg) translateY(6px); filter: brightness(0.6); }
       .battle .unit.dead .pennant, .battle .unit.dead .hp { display: none; }
-      .battle .unit.retreating { opacity: 0.8; }
       .battle .projectile { position: absolute; width: 8px; height: 2px; background: #f3ecd8; margin-left: -4px; }
       .battle .projectile.magic { background: #b26cff; width: 6px; height: 6px; border-radius: 50%; }
       .battle .projectile.axe { background: #bbb; width: 5px; height: 5px; }

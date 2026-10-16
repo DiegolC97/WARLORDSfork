@@ -96,23 +96,48 @@ describe('statistics are identical whichever race fields a unit (AC 2, AC 4)', (
     expect(a.attacks.map((x) => x.power)).toEqual(b.attacks.map((x) => x.power));
   });
 
-  it('the Spearman matches the rules document: speed 5, 40 HP, 50 recharge, 130 range, 250 cost, swipes at 10/20/10', () => {
+  it('the Spearman keeps the rules document\'s speed 5, 50 recharge, 130 range, 250 cost and spear swipes at 10/20/10', () => {
     const s = unitStats(id('Spearman'));
     expect(s.speed).toBe(5);
-    expect(s.hitPoints).toBe(40);
     expect(s.recharge).toBe(50);
     expect(s.range).toBe(130);
     expect(s.cost).toBe(250);
-    expect(s.attacks).toHaveLength(3);
-    expect(s.attacks.map((a) => a.power)).toEqual([[10], [20], [10]]);
-    expect(s.attacks.every((a) => a.kind === 'melee' && a.clip === 15 && a.strikeFrames[0] === 4 && a.reach === 130)).toBe(true);
+    const spear = s.attacks.slice(0, 3);
+    expect(spear.map((a) => a.power)).toEqual([[10], [20], [10]]);
+    expect(spear.every((a) => a.kind === 'melee' && a.clip === 15 && a.strikeFrames[0] === 4 && a.reach === 130 && a.upgraded)).toBe(true);
     expect(s.upgradeTrack).toBe('spear');
+  });
+
+  it('the Spearman\'s shield bash is a fourth melee swipe with its own power, reach and strike frame that does not scale with Spear Training', () => {
+    const s = unitStats(id('Spearman'));
+    expect(s.attacks).toHaveLength(4);
+    const bash = s.attacks[3]!;
+    expect(bash.kind).toBe('melee');
+    if (bash.kind !== 'melee') return;
+    expect(bash.upgraded).toBe(false);
+    expect(bash.strikeFrames).toHaveLength(1);
+    expect(bash.strikeFrames[0]!).toBeLessThan(bash.clip);
+    expect(bash.power[0]!).toBeGreaterThan(0);
+    expect(bash.reach).toBeGreaterThan(0);
+    expect(bash.reach).toBeLessThanOrEqual(s.range);
+  });
+
+  it('the Spearman\'s hit points absorb the bash: expected damage per frame × hit points stays within 5 % of the three-swipe document figure', () => {
+    const s = unitStats(id('Spearman'));
+    const meanDamage = (a: { power: readonly number[] }) => a.power.reduce((sum, p) => sum + (p - 1) / 2, 0);
+    const perFrame = (attacks: readonly { power: readonly number[]; clip: number }[]) =>
+      attacks.reduce((sum, a) => sum + meanDamage(a), 0) / attacks.reduce((sum, a) => sum + a.clip, 0);
+    // Rules §8.2: three swipes of 15 frames, mean damage 4.5 / 9.5 / 4.5, 40 hit points.
+    const documented = perFrame(s.attacks.slice(0, 3)) * 40;
+    const restored = perFrame(s.attacks) * s.hitPoints;
+    expect(perFrame(s.attacks)).toBeGreaterThan(perFrame(s.attacks.slice(0, 3)));
+    expect(Math.abs(restored - documented) / documented).toBeLessThan(0.05);
   });
 
   it('every unit is defined with the rules document\'s table values', () => {
     // #, speed, HP, recharge, range, cost — rules §6.1.
     const table: Record<string, [number, number, number, number, number]> = {
-      Spearman: [5, 40, 50, 130, 250],
+      Spearman: [5, 37, 50, 130, 250], // 40 in the document; lowered for the restored shield bash
       Swordsman: [3, 100, 70, 100, 600],
       Archer: [2, 15, 70, 1500, 500],
       Mage: [3, 10, 180, 1000, 900],

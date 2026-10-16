@@ -30,6 +30,7 @@ export {
   battlesRemaining,
   applyVictory,
   newCampaignPatch,
+  pickRacePatch,
   type RegionOwners,
   type Defender,
   type BattleSetup,

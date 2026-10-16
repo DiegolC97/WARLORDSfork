@@ -31,6 +31,18 @@ module.exports = {
       to: { path: '^src/save/(schema|migrations|saveStore)\\.ts$' },
     },
     {
+      name: 'battle-simulation-is-headless',
+      severity: 'error',
+      comment:
+        'The battle simulation (src/battle) knows only field units and ticks: it must never reach rendering or ' +
+        'engine code — no screen, no engine host, no UI, no shell, no app entry, and never the PlayCanvas package. ' +
+        'Art and resolution change underneath it; a rule never changes for them.',
+      from: { path: '^src/battle/' },
+      to: {
+        path: '^src/(screens|engine|ui|shell|assets)/|^src/(app|main)\\.ts$|^node_modules/playcanvas',
+      },
+    },
+    {
       name: 'no-circular',
       severity: 'error',
       from: {},

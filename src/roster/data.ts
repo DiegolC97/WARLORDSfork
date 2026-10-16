@@ -138,6 +138,13 @@ export interface RaceDefinition {
   readonly id: RaceId;
   /** The one unit only this race fields, or `null` for a race with the generic pool only. */
   readonly exclusive: UnitId | null;
+  /**
+   * The upgrade track this race starts at level −1 (rules §10 adapted: one
+   * penalty per race, a different track for each). The level is signed and
+   * flows through the ordinary formulas; the shop charges `base × 2` to
+   * climb out of it (§9).
+   */
+  readonly handicap: UpgradeTrack;
   readonly palette: PaletteId;
   /** Texture atlas (relative to the site root) holding every unit the race fields. */
   readonly atlas: string;
@@ -190,11 +197,23 @@ function projectile(
   };
 }
 
+/**
+ * The Spearman's shield bash (rules §16.1): the original called an undefined
+ * routine for it, so it never happened. Restored here as a fourth swipe —
+ * a shield strike, so it does not scale with Spear Training — that enters
+ * the uniform pick alongside the three spear swipes. The document's figure
+ * for the three-swipe Spearman is 18.5 expected damage over 45 frames of
+ * swipes (0.411 per frame); the bash lifts that to 28 over 63 (0.444),
+ * which the hit points below absorb (40 → 37 keeps damage × toughness level;
+ * see `src/roster/roster.test.ts`).
+ */
+const SPEARMAN_SHIELD_BASH: MeleeAttack = melee(18, [7], 100, [20], { upgraded: false });
+
 export const UNITS: Readonly<Record<UnitId, UnitDefinition>> = {
   0: {
-    id: 0, speed: 5, hitPoints: 40, recharge: 50, range: 130, cost: 250, shownMaxDamage: 20,
+    id: 0, speed: 5, hitPoints: 37, recharge: 50, range: 130, cost: 250, shownMaxDamage: 20,
     walk: WALK, upgradeTrack: 'spear', sprite: 'spearman',
-    attacks: [melee(15, [4], 130, [10]), melee(15, [4], 130, [20]), melee(15, [4], 130, [10])],
+    attacks: [melee(15, [4], 130, [10]), melee(15, [4], 130, [20]), melee(15, [4], 130, [10]), SPEARMAN_SHIELD_BASH],
   },
   1: {
     id: 1, speed: 3, hitPoints: 100, recharge: 70, range: 100, cost: 600, shownMaxDamage: 35,
@@ -324,15 +343,18 @@ const PLACEHOLDER_ATLAS = 'assets/units/placeholder-units.json';
  * The races. race1…race6 each own one exclusive; race7, the race a finished
  * campaign unlocks, fields the generic pool only. Adding a race is one more
  * entry here (plus its id in `src/save`, its names in the naming file).
+ *
+ * Handicaps: seven races, seven tracks, each race weak on a different one
+ * and never on the track its own exclusive scales with.
  */
 export const RACE_DEFINITIONS: Readonly<Record<RaceId, RaceDefinition>> = {
-  race1: { id: 'race1', exclusive: 18, palette: 'blue', atlas: PLACEHOLDER_ATLAS },
-  race2: { id: 'race2', exclusive: 9, palette: 'orange', atlas: PLACEHOLDER_ATLAS },
-  race3: { id: 'race3', exclusive: 10, palette: 'sky', atlas: PLACEHOLDER_ATLAS },
-  race4: { id: 'race4', exclusive: 16, palette: 'green', atlas: PLACEHOLDER_ATLAS },
-  race5: { id: 'race5', exclusive: 17, palette: 'purple', atlas: PLACEHOLDER_ATLAS },
-  race6: { id: 'race6', exclusive: 13, palette: 'yellow', atlas: PLACEHOLDER_ATLAS },
-  race7: { id: 'race7', exclusive: null, palette: 'vermilion', atlas: PLACEHOLDER_ATLAS },
+  race1: { id: 'race1', exclusive: 18, handicap: 'spear', palette: 'blue', atlas: PLACEHOLDER_ATLAS },
+  race2: { id: 'race2', exclusive: 9, handicap: 'speed', palette: 'orange', atlas: PLACEHOLDER_ATLAS },
+  race3: { id: 'race3', exclusive: 10, handicap: 'armour', palette: 'sky', atlas: PLACEHOLDER_ATLAS },
+  race4: { id: 'race4', exclusive: 16, handicap: 'archery', palette: 'green', atlas: PLACEHOLDER_ATLAS },
+  race5: { id: 'race5', exclusive: 17, handicap: 'sword', palette: 'purple', atlas: PLACEHOLDER_ATLAS },
+  race6: { id: 'race6', exclusive: 13, handicap: 'halberd', palette: 'yellow', atlas: PLACEHOLDER_ATLAS },
+  race7: { id: 'race7', exclusive: null, handicap: 'axe', palette: 'vermilion', atlas: PLACEHOLDER_ATLAS },
 };
 
 export const ROSTER: RosterDefinition = {

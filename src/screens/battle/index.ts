@@ -14,6 +14,7 @@ import { CONTESTED_LABEL, raceName, regionName } from '../../names';
 import {
   BLOC_RACES,
   isUnitId,
+  raceStartingUpgrades,
   raceVisuals,
   referencedAtlases,
   starterUnits,
@@ -83,7 +84,9 @@ function mountBattle(ctx: ScreenContext): () => void {
     race: leftRace,
     army: setup ? (ownedArmy.length > 0 ? ownedArmy : [...starterUnits()]) : twoPlayerArmy(leftRace),
     control: 'human',
-    upgrades: save.upgradeLevels as Partial<Record<UpgradeTrack, number>>,
+    // A campaign carries its levels in the save (the handicap was written when the race was picked);
+    // a two-player side starts at its race's handicap alone (rules §14).
+    upgrades: setup ? (save.upgradeLevels as Partial<Record<UpgradeTrack, number>>) : raceStartingUpgrades(leftRace),
     autoSend: save.autoSendOn,
   };
   const rightRace: RaceId | null = setup
@@ -91,12 +94,15 @@ function mountBattle(ctx: ScreenContext): () => void {
       ? setup.defender.race
       : null
     : (BLOC_RACES[Math.floor(Math.random() * BLOC_RACES.length)] ?? BLOC_RACES[0]);
+  // The defending race starts at its handicap too (rules §12.3); the contested host has no race, so no handicap.
+  const rightUpgrades = rightRace ? raceStartingUpgrades(rightRace) : {};
   const right: SideSetup = setup
-    ? { race: rightRace, army: setup.units, control: 'ai', statBonus: setup.statBonus }
-    : { race: rightRace, army: twoPlayerArmy(rightRace ?? BLOC_RACES[0]), control: 'human' };
+    ? { race: rightRace, army: setup.units, control: 'ai', statBonus: setup.statBonus, upgrades: rightUpgrades }
+    : { race: rightRace, army: twoPlayerArmy(rightRace ?? BLOC_RACES[0]), control: 'human', upgrades: rightUpgrades };
   const sim = createBattle({ left, right });
 
   overlay.dataset.mode = mode;
+  overlay.dataset.seed = String(sim.snapshot().seed);
   if (setup) {
     overlay.dataset.region = setup.region;
     overlay.dataset.defender = setup.defender.kind === 'race' ? setup.defender.race : 'contested';
@@ -285,13 +291,16 @@ function mountBattle(ctx: ScreenContext): () => void {
   continueButton.addEventListener('click', finish);
 
   // ---- the frame loop: fixed 24 fps steps from the host's frames
+  // The simulation stops on the deciding tick; the result panel's wait is
+  // presentation, so the screen counts its own frames after the decision.
   let accumulator = 0;
+  let framesSinceDecision = 0;
   const step = () => {
     input.pumpHeld();
     sim.tick();
     const frame = sim.snapshot();
     render(frame);
-    if (frame.winner && frame.winnerTick !== null && frame.tick - frame.winnerTick >= RESULT_AUTO_CONTINUE_FRAMES) finish();
+    if (frame.winner && ++framesSinceDecision >= RESULT_AUTO_CONTINUE_FRAMES) finish();
   };
   ctx.onFrame((dt) => {
     accumulator += Math.min(dt, MAX_CATCH_UP_SECONDS);

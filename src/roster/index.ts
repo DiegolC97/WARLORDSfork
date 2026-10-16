@@ -43,6 +43,8 @@ export {
   shopOffers,
   SHOP_OFFER_LIMIT,
   upgradeCost,
+  HANDICAP_LEVEL,
+  raceStartingUpgrades,
   raceVisuals,
   referencedAtlases,
   type Rng,

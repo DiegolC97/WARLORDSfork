@@ -9,6 +9,7 @@ import {
   initialOwners,
   isCampaignComplete,
   newCampaignPatch,
+  pickRacePatch,
   type RegionId,
 } from '../../campaign';
 import { CONTESTED_LABEL, raceName, regionName } from '../../names';
@@ -63,7 +64,7 @@ export const mapScreen: ScreenDefinition = {
       }
 
       const pick = (race: RaceId) => {
-        ctx.campaign.update({ chosenRace: race, regionOwners: initialOwners(race), battleRegion: null });
+        ctx.campaign.update(pickRacePatch(race));
         render();
       };
       const attack = (id: RegionId) => {

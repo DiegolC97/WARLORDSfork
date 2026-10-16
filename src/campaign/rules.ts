@@ -9,7 +9,7 @@
  * started (no race picked).
  */
 import { BLOC_RACES, UNLOCKABLE_RACE, type BlocRaceId, type CampaignSave, type RaceId } from '../save';
-import { mixedRoster, rosterFor, starterUnits, type UnitId } from '../roster';
+import { mixedRoster, raceStartingUpgrades, rosterFor, starterUnits, type UnitId } from '../roster';
 import { BLOCS, CONTESTED, REGIONS, isContested, region, type RegionId } from './regions';
 
 export const PLAYER_OWNER = 'player';
@@ -133,6 +133,20 @@ export function applyVictory(save: Readonly<CampaignSave>, id: RegionId): Campai
     campaignLevel: battlesWon(regionOwners) + 1,
     battleRegion: null,
     raceUnlocked: save.raceUnlocked || isCampaignComplete(regionOwners),
+  };
+}
+
+/**
+ * The save changes picking `race` for a campaign produces: the race, its
+ * three starting regions, no pending battle, and its upgrade tracks at
+ * their starting levels — all 0 but the race's handicap at −1 (rules §10).
+ */
+export function pickRacePatch(race: RaceId): CampaignPatch {
+  return {
+    chosenRace: race,
+    regionOwners: initialOwners(race),
+    battleRegion: null,
+    upgradeLevels: { ...raceStartingUpgrades(race) },
   };
 }
 

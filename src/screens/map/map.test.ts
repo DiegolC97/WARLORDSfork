@@ -201,11 +201,14 @@ describe('conquest on the map (AC 5)', () => {
 
 describe('persistence (AC 6)', () => {
   it('quitting after a battle and reopening restores the map, gold, army and upgrades', async () => {
-    // The shop and battle slices will change these; stand in for them in the stored save.
-    new SaveStore({ storage }).write({ ...saved(), gold: 1375, ownedUnits: [0, 1, 2, 13], upgradeLevels: { attack: 2, armour: 1 } });
     await boot();
     await click('campaign');
     await click('pick-race:race4');
+    // Picking the race wrote its handicap; the shop and battle slices will change the rest — stand in for them in the stored save.
+    expect(saved().upgradeLevels).toEqual({ archery: -1 });
+    new SaveStore({ storage }).write({ ...saved(), gold: 1375, ownedUnits: [0, 1, 2, 13], upgradeLevels: { archery: -1, attack: 2, armour: 1 } });
+    await boot();
+    await click('campaign');
     await conquer('r16');
     await conquer('r26');
     const before = saved();
@@ -220,7 +223,7 @@ describe('persistence (AC 6)', () => {
     expect(after.regionOwners).toEqual(before.regionOwners);
     expect(after.gold).toBe(1375);
     expect(after.ownedUnits).toEqual([0, 1, 2, 13]);
-    expect(after.upgradeLevels).toEqual({ attack: 2, armour: 1 });
+    expect(after.upgradeLevels).toEqual({ archery: -1, attack: 2, armour: 1 });
     expect(after.chosenRace).toBe('race4');
     expect(after.campaignLevel).toBe(3);
     const mapAfter = [...overlayRoot.querySelectorAll<SVGGElement>('[data-region]')].map((g) => [g.dataset.region, g.dataset.owner, g.querySelector('polygon')!.getAttribute('fill')]);

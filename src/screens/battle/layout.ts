@@ -35,6 +35,14 @@ export function laneY(lane: number): number {
   return FIELD_BAND.y + lane * LANE_HEIGHT - 4;
 }
 
+/** Stage pixels per field unit of height: a lane's 150 field units span one lane band. */
+export const PIXELS_PER_FIELD_Y = LANE_HEIGHT / 150;
+
+/** Stage pixels above a lane's baseline for a field height (a projectile's `y`). */
+export function fieldHeight(y: number): number {
+  return y * PIXELS_PER_FIELD_Y;
+}
+
 /** Stage x of a field x: exits at the stage edges. */
 export function fieldX(x: number): number {
   return ((x - FIELD.minX) / (FIELD.maxX - FIELD.minX)) * STAGE_WIDTH;

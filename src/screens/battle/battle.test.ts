@@ -340,7 +340,8 @@ describe('charge meter (AC 7)', () => {
     expect(meter.dataset.kills).toBe('0');
     expect(chargeButton.disabled).toBe(true);
     const sim = handle().simulation;
-    // The left floods lane 4 with upgraded swordsmen; the defenders are fed into the same lane as fast as they recharge.
+    // One upgraded swordsman at a time holds lane 4 (so the left cannot win on the bar first);
+    // the defenders are fed into the same lane as fast as they recharge and die to it one by one.
     const feedDefenders = () => {
       const s = sim.snapshot().spawners.right;
       if (!s.canRelease) return;
@@ -349,10 +350,16 @@ describe('charge meter (AC 7)', () => {
       while (sim.snapshot().spawners.right.lane > 4) sim.command('right', 'lane-up');
       sim.command('right', 'release');
     };
-    keyDown('Space');
+    const holdLane = () => {
+      const s = sim.snapshot();
+      if (!s.spawners.left.canRelease || s.units.some((u) => u.side === 'left' && u.lane === 4 && u.phase !== 'dead')) return;
+      keyDown('Space');
+      keyUp('Space');
+    };
     let armedAt: number | null = null;
     for (let t = 0; t < 12000 && armedAt === null; t++) {
       feedDefenders();
+      holdLane();
       host.tick(1);
       const s = sim.snapshot();
       expect(meter.dataset.kills).toBe(String(s.spawners.left.chargeKills));
@@ -362,7 +369,6 @@ describe('charge meter (AC 7)', () => {
       if (s.spawners.left.chargeReady) armedAt = s.tick;
       if (s.winner) break;
     }
-    keyUp('Space');
     expect(armedAt, 'the left side never armed its charge').not.toBeNull();
     const before = new Set(handle().simulation.snapshot().units.filter((u) => u.side === 'left').map((u) => u.id));
     keyDown('KeyQ');

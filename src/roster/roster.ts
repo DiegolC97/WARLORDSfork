@@ -147,6 +147,18 @@ export function shopOffers(owned: readonly number[], race: RaceId, def: RosterDe
 
 export const SHOP_OFFER_LIMIT = 8;
 
+/** The level every race starts each upgrade track at: 0, except its handicap track at −1 (rules §10). */
+export const HANDICAP_LEVEL = -1;
+
+/**
+ * The upgrade levels a side playing `race` starts a campaign or a
+ * two-player battle with: only the race's handicap track, at −1. Tracks
+ * absent from the record are level 0.
+ */
+export function raceStartingUpgrades(race: RaceId, def: RosterDefinition = ROSTER): Partial<Record<UpgradeTrack, number>> {
+  return { [def.races[race].handicap]: HANDICAP_LEVEL };
+}
+
 /** Gold the next level of an upgrade track costs: `base × (1 + |level|)` (rules §9). */
 export function upgradeCost(track: UpgradeTrack, currentLevel: number): number {
   return UPGRADE_TRACKS[track].baseCost * (1 + Math.abs(currentLevel));
