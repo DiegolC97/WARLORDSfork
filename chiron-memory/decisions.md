@@ -124,3 +124,31 @@ What: `scripts/check-roster.mjs` creates a Vite dev server in middleware mode, c
 **Why:** the menu and map are DOM already and the headless tests need a DOM; the engine root is still scaled so an engine-rendered field can be dropped in later.
 **Where:** `src/screens/battle/layout.ts`, `backdrop.ts`, `hud.ts`, `rack.ts`, `input.ts`, `units.ts`, `index.ts`.
 **Learned:** 2026-10-15.
+
+## The battle simulation owns one seeded generator and freezes on the deciding tick
+
+**What:** `BattleConfig.seed` (32-bit) seeds a mulberry32 in `src/battle/rng.ts`; every roll — spawn jitter, attack-or-walk, swipe pick, damage, drift, the AI's dice — draws from it, and the snapshot reports the seed. Once a winner is decided `tick()` is a no-op: the deciding tick's snapshot is the battle's final state. The document's post-decision retreat (§5.4) and the 240-frame result wait are presentation; the battle screen counts its own frames after the decision.
+**Why:** the work order requires replay-identical snapshots from a seed plus scripted inputs, and requires that no tick be processed after the bar decides the battle. An injected `Math.random` cannot promise that; a frozen clock can.
+**Where:** `src/battle/rng.ts`, `src/battle/simulation.ts` (`tick`), `src/screens/battle/index.ts` (`framesSinceDecision`), replay test in `src/battle/simulation.test.ts`.
+**Learned:** 2026-10-16. Screen-level tests still seed through a `Math.random` spy (the screen draws the seed from it); any scenario that depends on how a battle unfolds should be made structurally robust (e.g. one attacker at a time) rather than seed-hunted.
+
+## Each race starts one upgrade track at −1; levels are signed everywhere
+
+**What:** `RaceDefinition.handicap` names the track (race1 spear, race2 speed, race3 armour, race4 archery, race5 sword, race6 halberd, race7 axe — seven races, seven tracks, never the race's own exclusive's track). `raceStartingUpgrades(race)` returns `{ [track]: −1 }`; `pickRacePatch` writes it into the save when a campaign race is picked, the battle screen gives two-player sides and the AI defender their race's handicap, and the save schema accepts negative levels. The formulas live in `src/battle/upgrades.ts` (`speedFactor`, `hitPointsAtSpawn`, `strikePower`, `driftRange`) and treat −1 like any level: speed ×0.9, −10 HP, −5 power, drift +1.
+**Why:** the work order replaces the original's bonus+penalty pairs with one −1 handicap per race and insists −1 is a real level, not an unset sentinel. The shop's `base × (1 + |level|)` already makes climbing out cost double.
+**Where:** `src/roster/data.ts`, `src/roster/roster.ts`, `src/roster/validate.ts` (distinct handicaps), `src/save/schema.ts`, `src/campaign/rules.ts`, `src/battle/upgrades.ts` + table test `src/battle/upgrades.test.ts`.
+**Learned:** 2026-10-16. A test that seeds `upgradeLevels` must do so after the race pick, which overwrites them.
+
+## Projectiles fly in field units with a rolled drift and an assumed hitbox
+
+**What:** A projectile launches 66 units above its firer's feet (`PROJECTILE_LAUNCH_HEIGHT`), moves `speed × facing` horizontally and a drift of `(base − Archery) × (rand − rand)` vertically, rolled once at launch (`driftRange` in `upgrades.ts`; magic ignores Archery). Each tick it tests overlap with its firer's *current* target only — `UNIT_HITBOX` = half-width 40, height 140 from the feet — and is removed at `x < −50` or `x > 2850` (`FIELD.projectileMinX/MaxX`). `ProjectileState` reports `y` and `firer`.
+**Why:** the rules document gives the launch height, the drift formula and the despawn bounds but no sprite size; the hitbox is an assumption sized so Archery 7 always connects and a drifted shot can sail over or fall short. Keep it in the seam constants, not the art.
+**Where:** `src/battle/types.ts`, `src/battle/simulation.ts` (`tickProjectile`, `overlaps`), tests in `src/battle/combat.test.ts` ("projectiles").
+**Learned:** 2026-10-16. The hitbox height is unverified against the original and should be revisited when real sprite proportions exist.
+
+## The territory bar decides on the lead itself, on the tick a crossing makes it 25
+
+**What:** `tickBar` compares `leftScore − rightScore` with `POINTS_TO_WIN` (25) every tick and decides the battle on the tick a crossing reaches it, snapping `barWidth` to 700 or 0; the 1 px/frame animation of `barWidth` remains for the renderer on every other tick. The timer still ends a battle at 7200 for the higher score and plays on at a tie (§5.3). Quirk 19 (win registered up to 14 frames late or lost if the score swung back) is fixed.
+**Why:** the work order's acceptance criterion requires termination on the same tick the limit is reached, with no further ticks processed.
+**Where:** `src/battle/simulation.ts` (`tickBar`), `src/battle/types.ts` (`POINTS_TO_WIN`), tests "a 25-point lead…" in `src/battle/simulation.test.ts`.
+**Learned:** 2026-10-16. Any test that watches the bar move 1 px per frame must stop at the decision tick, where it snaps.

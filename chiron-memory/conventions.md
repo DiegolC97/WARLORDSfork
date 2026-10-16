@@ -43,3 +43,17 @@ What: Ownership, attackability, battle setup, victory and new-campaign logic are
 ## Screens render per-race unit names and prices only through src/roster
 
 What: Shop and battle placeholders call `unitDisplayName`, `shopPrice`, `killBounty`, `shopOffers`, `twoPlayerArmy` and `raceVisuals`; the shop buys by deducting `shopPrice` and appending to `ownedUnits`; `src/campaign/palette.ts` derives `RACE_COLOURS` from `raceVisuals(race).tint` · Why: the definition must be the only source of statistics, so a cost change moves shop price and bounty together and a palette change moves sprites and map together · Where: src/screens/shop/index.ts, src/screens/battle/index.ts, src/campaign/palette.ts, src/campaign/rules.ts (starterUnits)
+
+## Every rules-document quirk (§16) has a recorded preserve-or-fix decision
+
+**What:** `src/battle/quirks.ts` holds the 19 quirks as a typed table (`id`, `section`, `summary`, `decision`, `rationale`, `where`); `quirks.test.ts` checks the table is complete and that the data-backed decisions hold in the roster (which strikes scale, fixed walkers, the Archer's walk-off, the body fade, the 25-point lead). The simulation marks a preserved or fixed quirk with a `Quirk N preserved/fixed` comment at the rule. Current fixes: 1 (Spearman shield bash restored), 8 (gold saved on every outcome), 16 (unbounded ids), 19 (bar decides on the lead, same tick); 13 and 18 are not applicable to the redesigned map; the rest are preserved.
+**Why:** the work order requires each quirk to be explicitly decided and the decision kept next to the rule it affects.
+**Where:** `src/battle/quirks.ts`, `src/battle/quirks.test.ts`, comments in `src/battle/simulation.ts` and `src/roster/data.ts`.
+**Learned:** 2026-10-16. When a later slice changes a decision, change the table entry and its comment together; the test will catch a data change that silently contradicts a preserved quirk.
+
+## src/battle may not import rendering or engine code (dependency-cruiser `battle-simulation-is-headless`)
+
+**What:** Nothing under `src/battle/` may import `src/screens`, `src/engine`, `src/ui`, `src/shell`, `src/assets`, `src/app.ts`, `src/main.ts` or the `playcanvas` package. `npm run check:deps` (first step of `npm run build` and CI) fails with the rule's name and both ends of the offending import.
+**Why:** the work order makes the simulation the seam every other slice depends on: zoom and art must change underneath it without touching a rule, which an automated boundary guarantees better than review.
+**Where:** `.dependency-cruiser.cjs`; verified on 2026-10-16 by injecting an engine, a screen and a PlayCanvas import into `src/battle/simulation.ts` — each was reported — and removing them.
+**Learned:** test hooks that need the DOM (like `handle.ts`) may use DOM *types* but must not import screen modules.

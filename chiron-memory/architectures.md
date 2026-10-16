@@ -26,7 +26,7 @@ What: `RACES`, `BLOC_RACES`, `UNLOCKABLE_RACE` and `RaceId` are defined in `src/
 **What:** `src/battle/types.ts` defines `FrameState` (tick, frames left, scores, territory-bar target and drawn width, winner, per-side `SpawnerState` with lane / selected unit / charged / recharge time / charge kills, every unit and projectile) and `SpawnerCommand` (`lane-up`, `lane-down`, `previous-unit`, `next-unit`, `release`, `charge`). `src/battle/simulation.ts` (`createBattle`) implements the rules document's battle frame — spawner and recharge (§4), scoring, bar and timer (§5), the unit state machine with melee strikes, projectiles and kill credit (§7–8) and the computer opponent (§13) — reading every statistic from `src/roster`. The battle screen renders snapshots and issues commands; it holds no rule. `battleHandle(overlay)` (in the seam, not the screen folder) exposes the simulation on a mounted battle overlay for tests.
 **Why:** the battle-screen work order was written against "the simulation's frame snapshot" but no simulation existed; defining the seam first lets a combat slice replace or refine the reference implementation without touching the screen or its tests.
 **Where:** `src/battle/`, `src/screens/battle/`, tests in `src/battle/simulation.test.ts` and `src/screens/battle/battle.test.ts`.
-**Learned:** 2026-10-15. Known simplifications in the reference simulation: projectile drift is not modelled, corpses are removed after a fixed 600 frames, the level-one tutorial does not hold the timer, and the enemy's difficulty upgrades (§12.4) are not applied yet.
+**Learned:** 2026-10-15; revised 2026-10-16 by the rules-faithful simulation slice: projectile drift and the 500-frame body plus 1 %/frame fade are now modelled (see the decisions on projectiles and the seeded generator). Still outside the simulation: the level-one tutorial timer hold and the enemy's difficulty upgrades (§12.4), which belong to the campaign-difficulty slice.
 
 ## Screens get a frame clock through EngineHost.onFrame and ctx.onFrame
 
@@ -34,3 +34,10 @@ What: `RACES`, `BLOC_RACES`, `UNLOCKABLE_RACE` and `RaceId` are defined in `src/
 **Why:** screens must not reach the engine app directly (it is `null` headless), and tests need to drive time deterministically.
 **Where:** `src/engine/host.ts`, `src/engine/nullHost.ts`, `src/engine/playcanvasHost.ts`, `src/shell/screenShell.ts`, `src/screens/battle/index.ts`.
 **Learned:** 2026-10-15.
+
+## The frame snapshot carries clip names, clip frames, opacity and the tick's hits
+
+**What:** `UnitState` reports `race`, `clip` (`walk`, `swipe-N` by roster index, `death`), `clipFrame` (the frame offset the tick just processed, so a strike shows on the swipe's strike frame) and `alpha` (1 while alive and for 500 frames of body, then 0.99 … 0.01 and removal at 0). `FrameState.hits` lists every blow that landed this tick (`by`, `target`, `kind`, `power`, `damage`, `knockback`, `killed`). Inside the simulation a unit's clip advances at the start of its tick (`frame++`, `cycleLeft--`), and a clip of N frames occupies exactly N ticks (frames 0…N−1) before the next `ready()`.
+**Why:** the work order's snapshot is entity id, position, lane, type, race, facing, clip name and clip frame; the renderer maps clip names onto art and never asks the simulation about sprites. Hits let the renderer play impacts and let tests assert strike timing and damage rolls from outputs alone.
+**Where:** `src/battle/types.ts`, `src/battle/simulation.ts` (`tickUnit`, `unitState`, `damage`), tests in `src/battle/combat.test.ts`.
+**Learned:** 2026-10-16. Scenario tests should stream units (release whenever the recharge allows) rather than stage a single duel: two lone units can walk past each other on a 20 % roll and leave the scenario empty.
