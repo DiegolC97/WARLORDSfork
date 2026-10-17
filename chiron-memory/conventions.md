@@ -65,9 +65,9 @@ What: Shop and battle placeholders call `unitDisplayName`, `shopPrice`, `killBou
 **Where:** `src/ui/portrait.ts`; each screen declares `referencedAtlases().map(url => ({ id: atlasAssetId(url), type: 'json', url }))` as its manifest.
 **Learned:** 2026-10-16. `FrameState.sides[side]` now also carries `upgrades` and `statBonus`, so a test can assert the power a side's strikes resolve at (`attackPowers`) from the simulation it actually runs.
 
-## Screen tests that need real atlases boot a file-backed asset host
+## Screen tests that need real atlases boot the headless engine host with a public/ reader
 
-What: `NullEngineHost` resolves no assets, so a screen sees `NO_ATLAS` and draws placeholders. `src/screens/battle/sprites.test.ts` subclasses it (`FileAssetHost`) with a backend that parses `public/<url>` for json specs, which makes the battle screen draw the shipped atlases under jsdom and lets tests compare `data-frame` with `resolveFrame` on the simulation's snapshot. · Why: the art acceptance criteria (replay through each atlas, same-race accents, baselines, portraits) are only meaningful against the real atlas documents. · Where: src/screens/battle/sprites.test.ts · Learned: to face a chosen defending race from the map, give the player every region but that race's holdout.
+What: `NullEngineHost` resolves no assets and has no engine, so a battle screen under it draws no field. Battle, sprite and options tests boot `HeadlessEngineHost({ readText })` with a reader over `public/<url>`, which loads the shipped atlases as parsed json (for the racks' portraits) and as engine texture atlases (for the unit layer); tests then read `fieldHandle(overlay).units.sprites()` and compare each sprite's `frameKey`, clip and frame with `resolveFrame` on the simulation's snapshot. · Why: the art and renderer acceptance criteria are only meaningful against the real atlas documents and real sprite components. · Where: src/screens/battle/sprites.test.ts, src/screens/battle/battle.test.ts, src/screens/options/options.test.ts · Learned: destroy the host after each test (`app.destroy()` clears the engine's global current application, so entities created afterwards must be given their app explicitly — the renderer always passes it).
 
 ## The unit art recipe is the only instruction a new race variant needs
 

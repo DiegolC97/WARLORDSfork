@@ -66,3 +66,17 @@ What: The Spearman's 67 body frames plus accents overflowed 1024×1024 while eac
 ## Trimmed atlas frames may carry a pivot outside 0…1
 
 What: Frames are trimmed to their pixels and the pivot is the feet as a fraction of the trimmed rect, so a small frame far from the feet (an accent pennant, a lying body's spear) has a pivot like `[-3, 8.3]`. The contract validates that the pivot is finite, never that it lies inside the frame. · Why: the first contract draft rejected every accent frame for this; the renderer only multiplies the pivot by the rect size, so out-of-range values are correct. · Where: src/roster/atlas.ts (`contractProblems`)
+
+## Destroying one PlayCanvas app nulls the global the next `new pc.Entity()` falls back on
+
+**What:** `pc.Entity(name)` without an app argument uses `getApplication()`, the engine's current application; `app.destroy()` sets it to null, so after any test destroys a host, an entity created for a surviving app throws "Cannot read properties of null (reading 'systems')" on `addComponent`. Every entity in `src/render` and `src/engine/appHost.ts` is therefore created as `new pc.Entity(name, app)`.
+**Why:** the engine keeps one global current app; parallel or sequential apps in one test file expose it.
+**Where:** `src/render/unitLayer.ts`, `src/render/fieldView.ts`, `src/engine/appHost.ts`.
+**Learned:** 2026-10-17.
+
+## `gl.readPixels` on the game canvas reads zeros; sample pixels from a screenshot instead
+
+**What:** Reading the WebGL drawing buffer from an injected script — in a `requestAnimationFrame` after the engine's, or in the app's `postrender` event — returned transparent black for every pixel (the engine renders into its own back-buffer target and the default framebuffer is not preserved). The browser verification instead froze the simulation (`overlay.battle.simulation.tick = () => {}`), computed each pennant's screen position from `overlay.field.view.toScreen` and the accent frame's rect and pivot, took a DevTools screenshot (DPR 2) and sampled it with a 60-line pure-Python PNG decoder.
+**Why:** the acceptance criterion asks for sampled accent pixels; the screenshot path is the one that works on this setup.
+**Where:** verification only; `src/render/fieldHandle.ts` is the hook it used.
+**Learned:** 2026-10-17. A DevTools screenshot must be saved inside a workspace root (the repo), so delete it afterwards.
