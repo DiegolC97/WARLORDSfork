@@ -64,3 +64,11 @@ What: Shop and battle placeholders call `unitDisplayName`, `shopPrice`, `killBou
 **Why:** the shop needed the battle rack's portraits, and a cross-screen import is forbidden by dependency-cruiser.
 **Where:** `src/ui/portrait.ts`; each screen declares `referencedAtlases().map(url => ({ id: atlasAssetId(url), type: 'json', url }))` as its manifest.
 **Learned:** 2026-10-16. `FrameState.sides[side]` now also carries `upgrades` and `statBonus`, so a test can assert the power a side's strikes resolve at (`attackPowers`) from the simulation it actually runs.
+
+## Screen tests that need real atlases boot a file-backed asset host
+
+What: `NullEngineHost` resolves no assets, so a screen sees `NO_ATLAS` and draws placeholders. `src/screens/battle/sprites.test.ts` subclasses it (`FileAssetHost`) with a backend that parses `public/<url>` for json specs, which makes the battle screen draw the shipped atlases under jsdom and lets tests compare `data-frame` with `resolveFrame` on the simulation's snapshot. · Why: the art acceptance criteria (replay through each atlas, same-race accents, baselines, portraits) are only meaningful against the real atlas documents. · Where: src/screens/battle/sprites.test.ts · Learned: to face a chosen defending race from the map, give the player every region but that race's holdout.
+
+## The unit art recipe is the only instruction a new race variant needs
+
+What: `docs/art/unit-art-recipe.md` is written to be followed alone: a fresh agent given only the recipe produced a race7 Spearman variant that passed `check:roster` and the suite on the first build, and its nine points of friction (what the builder prints, the per-race build form, the list of rig knobs, the `raceAtlas` helper, which palette roles render, that stance offsets cannot move the strike) were folded back into the recipe. The builder now refuses a race whose reach does not peak on the roster's strike frame. · Why: an acceptance criterion requires a second artist to produce a variant from the recipe without further instruction; the recipe is the contract with the production line for the remaining eighteen units. · Where: docs/art/unit-art-recipe.md, scripts/build-unit-atlases.mjs (`reach` check), art/units/spearman/index.mjs · Learned: when the recipe changes, re-run a fresh-agent dry run rather than reviewing it by eye.

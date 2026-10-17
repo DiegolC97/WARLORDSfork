@@ -58,3 +58,11 @@ What: In app-level tests, `app.store.write(...)` after the app has booted does n
 **What:** While eyeballing the battle in the chrome-devtools MCP page, a unit once spawned and the unit selection moved with no scripted key; a repeated run with a keydown logger showed no key and no spawn.
 **Why:** unknown, most likely a key event from the tooling reaching the page; not reproducible.
 **Learned:** 2026-10-15. When a browser check shows input-like behaviour, log `keydown` on `window` before trusting it as a code defect.
+
+## A 4× sprite set only fits 1024² when held frames are pixel-identical
+
+What: The Spearman's 67 body frames plus accents overflowed 1024×1024 while each swipe recovered slowly over ten frames (every frame a different ~150×130 px rect). The clips now recover in `RECOVER_FRAMES` (5) and then return the exact ready pose; the packer stores identical pixels once, so a race atlas needs 430–780 rows. Anything that varies per frame (pennant wave, plume sway) must be driven by a pose field (`phase`), not the frame index, or held frames stop deduplicating. · Why: trimmed shelf packing cannot beat frame area; dedupe is the lever. · Where: art/units/spearman/clips.mjs (`RECOVER_FRAMES`, `phase`), art/lib/pack.mjs · Learned: when a new unit's atlas overflows, shorten its recoveries and check `unique` in the build output before touching the authoring scale.
+
+## Trimmed atlas frames may carry a pivot outside 0…1
+
+What: Frames are trimmed to their pixels and the pivot is the feet as a fraction of the trimmed rect, so a small frame far from the feet (an accent pennant, a lying body's spear) has a pivot like `[-3, 8.3]`. The contract validates that the pivot is finite, never that it lies inside the frame. · Why: the first contract draft rejected every accent frame for this; the renderer only multiplies the pivot by the rect size, so out-of-range values are correct. · Where: src/roster/atlas.ts (`contractProblems`)

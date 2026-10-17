@@ -20,3 +20,7 @@ What: The `/chiron-push` slash command commits all pending changes, pushes to `m
 ## PlayCanvas is consumed exclusively from the npm registry pinned to an exact version (2.22…
 
 What: PlayCanvas is consumed exclusively from the npm registry pinned to an exact version (2.22.4, no caret) in package.json and the lockfile, with zero engine source copied into the repo and no fork/source checkout in the build. · Why: work order requires the engine be a pure dependency; the playcanvas-engine repo is a read-only reference, never a push target. · Where: package.json, package-lock.json. <!-- id: 6e92c05f-ca91-4e6f-99a7-e2d88a4637d7-9 -->
+
+## Atlas generation and its review sheets
+
+What: `npm run build:atlases` (scripts/build-unit-atlases.mjs) loads the roster through Vite's SSR loader like check-roster, renders every `art/units/races/*.mjs` through every `art/units/*/index.mjs`, writes `public/assets/units/<race>.{png,json}` (1024 wide, packed height, frames trimmed and deduplicated) and `docs/art/<sprite>-sheet.png`, `-silhouettes-1x.png`, `-silhouettes-1x-zoom.png`, `-portraits.png`. The generated atlases are committed; CI does not regenerate them. · Why: Node 20+ with no native image dependency, so any machine can rebuild. · Where: scripts/build-unit-atlases.mjs, package.json
