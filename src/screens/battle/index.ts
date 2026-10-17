@@ -128,10 +128,10 @@ function mountBattle(ctx: ScreenContext): () => void {
   field.className = 'field';
   field.dataset.role = 'field';
   stage.appendChild(field);
-  const unitLayer = buildUnitLayer(field, {
-    left: leftRace,
-    right: rightRace ?? leftRace,
-  });
+  const atlasFor = (race: RaceId | null) => atlasFromAssets(ctx.assets, race ? raceVisuals(race).atlas : referencedAtlases()[0]);
+  const leftAtlas = atlasFor(leftRace);
+  const rightAtlas = atlasFor(rightRace);
+  const unitLayer = buildUnitLayer(field, { left: leftRace, right: rightRace ?? leftRace }, { left: leftAtlas, right: rightAtlas });
   const arrows = {} as Record<Side, HTMLDivElement>;
   for (const side of ['left', 'right'] as const) {
     const arrow = document.createElement('div');
@@ -146,9 +146,6 @@ function mountBattle(ctx: ScreenContext): () => void {
   const racks = document.createElement('div');
   racks.className = 'racks';
   stage.appendChild(racks);
-  const atlasFor = (race: RaceId | null) => atlasFromAssets(ctx.assets, race ? raceVisuals(race).atlas : referencedAtlases()[0]);
-  const leftAtlas = atlasFor(leftRace);
-  const rightAtlas = atlasFor(rightRace);
   const leftRack = buildRack(racks, {
     side: 'left',
     race: leftRace,

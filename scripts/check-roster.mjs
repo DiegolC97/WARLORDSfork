@@ -26,16 +26,17 @@ let exitCode = 0;
 try {
   const roster = await server.ssrLoadModule('/src/roster/index.ts');
 
-  // Frame names of every atlas the definition references, read from public/.
+  // Every atlas the definition references, parsed from public/ (frames, meta, texture).
   const atlases = {};
   for (const url of roster.referencedAtlases()) {
     const file = join(ROOT, 'public', url);
     if (!existsSync(file)) continue;
     const parsed = JSON.parse(readFileSync(file, 'utf8'));
-    atlases[url] = Object.keys(parsed.frames ?? {});
+    atlases[url] = { texture: parsed.texture, meta: parsed.meta, frames: parsed.frames ?? {} };
   }
 
   const errors = roster.validateRoster(roster.ROSTER, atlases);
+  for (const note of roster.rosterNotes(roster.ROSTER, atlases)) console.log(`check-roster: note — ${note.message}`);
   if (errors.length) {
     console.error(`check-roster: the roster definition is inconsistent (${errors.length} error${errors.length === 1 ? '' : 's'}):`);
     for (const e of errors) console.error(`  ${e.message}`);
@@ -43,7 +44,8 @@ try {
   } else {
     const units = roster.UNIT_IDS.length;
     const races = roster.definedRaces().length;
-    console.log(`check-roster: ok — ${units} units × ${races} races, ${Object.keys(atlases).length} atlas(es) present`);
+    const sets = Object.values(atlases).reduce((n, doc) => n + Object.keys(doc.frames).filter((k) => /^[^/]+\/ready\/0$/.test(k)).length, 0);
+    console.log(`check-roster: ok — ${units} units × ${races} races, ${Object.keys(atlases).length} atlas(es) present, ${sets} sprite set(s) honour the contract`);
   }
 } catch (err) {
   console.error('check-roster: could not load the roster definition');

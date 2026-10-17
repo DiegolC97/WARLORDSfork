@@ -8,7 +8,9 @@
  * `public/`), so the check never touches the file system itself.
  */
 import { EXCLUSIVE_UNIT_NAMES, RACE_UNIT_PREFIX, UNIT_NAMES, raceName, unitName } from '../names';
+import { contractProblems, hasSpriteSet, omittedClips, type AtlasDocument } from './atlas';
 import { ROSTER, UNIT_IDS, UPGRADE_TRACKS, type RosterDefinition, type UnitId } from './data';
+import type { RaceId } from './races';
 import { definedRaces, ownersOf, unitDisplayName } from './roster';
 
 export interface RosterError {
@@ -17,9 +19,15 @@ export interface RosterError {
   readonly message: string;
 }
 
-export type AtlasFrames = Readonly<Record<string, readonly string[]>>;
+/** The atlases the definition references, parsed, keyed by their url. */
+export type AtlasDocuments = Readonly<Record<string, AtlasDocument>>;
 
-export function validateRoster(def: RosterDefinition = ROSTER, atlases: AtlasFrames = {}): RosterError[] {
+export interface RosterNote {
+  readonly subject: string;
+  readonly message: string;
+}
+
+export function validateRoster(def: RosterDefinition = ROSTER, atlases: AtlasDocuments = {}): RosterError[] {
   const errors: RosterError[] = [];
   const err = (subject: string, message: string) => errors.push({ subject, message });
   const races = definedRaces(def);
@@ -107,22 +115,54 @@ export function validateRoster(def: RosterDefinition = ROSTER, atlases: AtlasFra
     });
   }
 
-  // Visuals: palette known, atlas present, and a frame for every unit the race fields.
+  // Visuals: palette known, atlas present, and for every unit the race fields either a
+  // sprite set that honours the atlas contract or a legacy placeholder frame.
   for (const race of races) {
     const { palette, atlas } = def.races[race];
     if (!(palette in def.palettes)) err(race, `${raceName(race)} (${race}) uses unknown palette "${palette}"`);
-    const frames = atlases[atlas];
-    if (!frames) {
+    const doc = atlases[atlas];
+    if (!doc) {
       err(atlas, `${raceName(race)} (${race}) references atlas "${atlas}", which does not exist`);
       continue;
     }
-    for (const unit of UNIT_IDS) {
-      const owner = ownersOf(unit, def)[0];
-      if (owner !== undefined && owner !== race) continue;
+    for (const unit of fieldedBy(race, def)) {
       const frame = def.units[unit].sprite;
-      if (!frames.includes(frame)) err(atlas, `atlas "${atlas}" has no frame "${frame}" for ${label(unit)} (${race})`);
+      if (hasSpriteSet(doc, frame)) {
+        for (const p of contractProblems(doc, unit, def)) err(atlas, `atlas "${atlas}": ${p.message} (${label(unit)}, ${race})`);
+      } else if (!(frame in doc.frames)) {
+        err(atlas, `atlas "${atlas}" has no frame "${frame}" for ${label(unit)} (${race})`);
+      }
     }
   }
 
   return errors;
+}
+
+/**
+ * What the definition leaves to the renderer rather than to the art: a
+ * sprite set that omits an optional swipe (drawn by the strike-pinned
+ * fallback). Never an error; the build check prints them.
+ */
+export function rosterNotes(def: RosterDefinition = ROSTER, atlases: AtlasDocuments = {}): RosterNote[] {
+  const notes: RosterNote[] = [];
+  for (const race of definedRaces(def)) {
+    const atlas = def.races[race].atlas;
+    const doc = atlases[atlas];
+    if (!doc) continue;
+    for (const unit of fieldedBy(race, def)) {
+      const omitted = omittedClips(doc, unit, def);
+      if (omitted.length > 0) {
+        notes.push({ subject: atlas, message: `atlas "${atlas}" omits ${omitted.join(', ')} for ${unitName(unit)} (unit ${unit}); the renderer stands in with the first swipe` });
+      }
+    }
+  }
+  return notes;
+}
+
+/** Every unit `race` may field: the generic pool plus its own exclusive. */
+function fieldedBy(race: RaceId, def: RosterDefinition): UnitId[] {
+  return UNIT_IDS.filter((unit) => {
+    const owner = ownersOf(unit, def)[0];
+    return owner === undefined || owner === race;
+  });
 }

@@ -3,17 +3,16 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { UNIT_NAMES, raceName } from '../names';
 import { ROSTER, UNIT_IDS, referencedAtlases, type RosterDefinition, type UnitId } from './index';
-import { validateRoster, type AtlasFrames } from './validate';
+import { validateRoster, type AtlasDocuments } from './validate';
 
 const id = (name: string): UnitId => UNIT_IDS.find((u) => UNIT_NAMES[u] === name)!;
 
 /** The atlases as the build check reads them from public/. */
-const atlases = (): AtlasFrames =>
+const atlases = (): AtlasDocuments =>
   Object.fromEntries(
     referencedAtlases().map((url) => {
       // Vitest runs from the project root, where the build check also reads public/.
-      const parsed = JSON.parse(readFileSync(join(process.cwd(), 'public', url), 'utf8')) as { frames: Record<string, unknown> };
-      return [url, Object.keys(parsed.frames)];
+      return [url, JSON.parse(readFileSync(join(process.cwd(), 'public', url), 'utf8')) as AtlasDocuments[string]];
     }),
   );
 
@@ -71,12 +70,12 @@ describe('roster validation (AC 6)', () => {
   });
 
   it('an atlas missing a frame for a unit the race fields fails', () => {
-    const frames = atlases();
-    const [url] = referencedAtlases();
-    const missingSpearman = { ...frames, [url!]: frames[url!]!.filter((f) => f !== ROSTER.units[0].sprite) };
-    const errors = validateRoster(ROSTER, missingSpearman);
+    const docs = atlases();
+    const url = ROSTER.races.race7.atlas;
+    const { [ROSTER.units[1].sprite]: _dropped, ...frames } = docs[url]!.frames;
+    const errors = validateRoster(ROSTER, { ...docs, [url]: { ...docs[url]!, frames } });
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0]!.message).toMatch(/has no frame "spearman"/);
+    expect(errors[0]!.message).toMatch(/has no frame "swordsman"/);
   });
 
   it('a unit missing a per-race name fails', () => {

@@ -53,4 +53,26 @@ export {
   type Rng,
   type RaceVisuals,
 } from './roster';
-export { validateRoster, type RosterError } from './validate';
+export { validateRoster, rosterNotes, type RosterError, type RosterNote, type AtlasDocuments } from './validate';
+export {
+  READY_FRAMES,
+  DEATH_FRAMES,
+  ATLAS_SCALE,
+  frameKey,
+  accentKey,
+  portraitKey,
+  requiredClips,
+  hasSpriteSet,
+  clipLength,
+  resolveFrame,
+  warpFrame,
+  contractProblems,
+  omittedClips,
+  type AtlasDocument,
+  type AtlasFrame,
+  type AtlasMeta,
+  type ClipSpec,
+  type ResolvedFrame,
+  type SpriteClip,
+  type PlayingClip,
+} from './atlas';

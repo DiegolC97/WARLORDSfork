@@ -29,6 +29,7 @@ Requires Node 20 or newer (CI uses Node 22).
 | `npm run check:deps` | Import-boundary check only (dependency-cruiser) |
 | `npm run check:names` | Fails if a working name appears outside the naming file |
 | `npm run check:roster` | Fails if the roster definition is inconsistent (see [Roster](#roster)) |
+| `npm run build:atlases` | Regenerates every race's unit atlas and the review sheets from `art/` (see [Unit art](#unit-art)) |
 
 CI (`.github/workflows/ci.yml`) runs the boundary check, the name check, the
 roster check, typecheck, tests and build on every push and pull request.
@@ -56,8 +57,12 @@ src/shell/routes.ts     navigation as data: screen id + event → next screen id
 src/shell/screenShell.ts  holds exactly one active screen, runs transitions
 src/screens/<id>/       one folder per screen; index.ts is its only public file
 src/ui/placeholder.ts   throwaway DOM helpers for placeholder screens
-src/ui/portrait.ts      a unit's portrait (race-atlas frame over the race tint); shared by the battle and shop racks
-public/assets/          static assets served at /assets/… (units/placeholder-units.* is the stand-in unit atlas)
+src/ui/portrait.ts      a unit's portrait (the atlas's portrait crop, or the legacy frame over the race tint); shared by the battle and shop racks
+src/roster/atlas.ts     the unit atlas contract: frame keys, clip lengths from the roster, clip → frame resolution
+art/                    unit art sources: the rasteriser (lib/), the Spearman rig and clips, one variant file per race
+scripts/build-unit-atlases.mjs  renders art/ into public/assets/units/<race>.{png,json} and docs/art/ review sheets
+docs/art/               the unit art recipe and the generated review sheets
+public/assets/          static assets served at /assets/… (units/<race>.* are the race atlases; units/placeholder-units.* the stand-in)
 ```
 
 ## Screens and navigation
@@ -178,12 +183,16 @@ the field band):
   Charge control (or Q / 0) releases the selected unit into all eight lanes;
 - the **spawner rack** per side lays one to eight buttons out with
   `rackGrid` (at most four per row, equal widths from the side's width,
-  last row centred); each shows the unit's portrait (its race-atlas frame
-  over the race tint, with a two-letter initial while the atlas is the
-  placeholder), its per-race name and its recharge state;
-- **units** are DOM sprites in the race tint with a team accent layer — a
-  white pennant flying right for the left side, a black one flying left
-  for the right — so two armies of the same race stay telling apart;
+  last row centred); each shows the unit's portrait (the atlas's portrait
+  crop over the race tint, or the legacy frame with a two-letter initial for
+  a unit without art), its per-race name and its recharge state;
+- **units** are DOM sprites drawn from the race atlas: the frame the
+  simulation's clip and frame resolve to (`resolveFrame`), its feet pivot on
+  the lane baseline, mirrored when facing left, with the atlas's untinted
+  pennant frame as a mask filled with the side's value — white for the left
+  side, black for the right — so two armies of the same race stay telling
+  apart. A unit whose atlas has no sprite set yet is a block in the race
+  tint with a CSS pennant;
 - the **footer** carries the level indicator (campaign level, or "2 Player"),
   Main menu, Surrender (hands the battle to the right side), Options and
   Retreat.
@@ -318,9 +327,38 @@ To add a race: append its id in `src/roster/races.ts`, add its entry to
 generic pool with no other change. To change a unit's cost, edit the one
 number in `data.ts`: the shop price and the kill bounty follow.
 
-Race art has not been delivered, so every race points at
-`public/assets/units/placeholder-units.json`, a 19-frame stand-in; the art
-slice points each race at its own atlas file.
+Each bloc race points at its own atlas, `public/assets/units/<race>.json`;
+`race7` has no art yet and keeps `placeholder-units.json`, a 19-frame
+stand-in.
+
+## Unit art
+
+Unit art is generated, not painted: `npm run build:atlases` renders the
+sources under `art/` into one atlas per race and the review sheets under
+`docs/art/`. The full production recipe — layer structure, the rig and its
+pose set, the palette roles, the frame layout, export settings, how to
+derive a race variant and how to add a unit — is
+[`docs/art/unit-art-recipe.md`](docs/art/unit-art-recipe.md).
+
+The Spearman is authored for all six bloc races from one shared rig
+(`art/units/spearman/`): the same poses and timings everywhere, race
+identity carried by a palette and a silhouette modifier in
+`art/units/races/<race>.mjs` (plume and slashed sleeves; a squat bearded
+frame; a tall narrow stance with the spear held high; a hunch with
+oversized fists; horned upper bulk; a tail on digitigrade legs). The other
+eighteen units still draw as the tinted placeholder block and keep a
+one-pixel legacy frame in every atlas.
+
+`src/roster/atlas.ts` is the **atlas contract** the build check and the
+renderer share: frames keyed `<sprite>/<clip>/<n>` (`ready` 2 frames, `walk`
+the roster's walk cycle, `swipe-i` the i-th attack's clip with its strike
+frame inside, `death` 8), an untinted accent frame
+`<sprite>/accent/<clip>/<n>` per body frame, a `<sprite>/portrait` crop,
+rects in top-left texture pixels with the feet as pivot, authored at 4×
+(`meta.scale`). `npm run check:roster` fails on any sprite set that breaks
+it. A swipe beyond the first may be omitted (the Spearman's restored shield
+bash, `swipe-4`, is): the renderer then plays the first swipe time-warped so
+the strike frames coincide, and the check prints a note.
 
 ## Display names
 

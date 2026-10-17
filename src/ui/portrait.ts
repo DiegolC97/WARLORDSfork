@@ -1,18 +1,17 @@
 /**
- * A unit's portrait: its frame in the race atlas drawn over the race tint,
- * with a two-letter glyph on top so the unit stays identifiable while the
- * atlas is a placeholder. Shared by the battle screen's spawner rack and
- * the shop's army rack, so both read the same atlas json and agree on how
- * a unit looks.
+ * A unit's portrait for the spawner rack and the shop's army rack. With a
+ * sprite set in the race atlas (the atlas contract, `src/roster/atlas.ts`)
+ * it is the `<sprite>/portrait` crop — head and shoulders of the ready
+ * pose — scaled into the rack's box over the race tint. Without one (the
+ * placeholder atlas) it is the legacy frame blended over the tint with a
+ * two-letter glyph so the unit stays identifiable. Shared by both racks so
+ * they read the same atlas json and agree on how a unit looks.
  */
 import type { LoadedAssets } from '../assets/loader';
-import type { UnitId } from '../roster';
+import { hasSpriteSet, portraitKey, type AtlasDocument, type UnitId } from '../roster';
 
-/** The atlas json as PlayCanvas parses it: frames keyed by name with a rect in grid units. */
-export interface AtlasJson {
-  readonly texture: string;
-  readonly frames: Readonly<Record<string, { readonly rect: readonly [number, number, number, number] }>>;
-}
+/** The atlas json as the loader parses it. */
+export type AtlasJson = AtlasDocument;
 
 export interface AtlasSource {
   /** Parsed atlas, or `null` when it is not available (headless). */
@@ -48,22 +47,29 @@ export function buildPortrait(unit: UnitId, frameName: string, tint: string, sou
   portrait.dataset.role = 'portrait';
   portrait.dataset.frame = frameName;
   portrait.style.background = tint;
-  const frame = atlas?.frames[frameName];
-  if (frame && atlasImage) {
-    const [col, row, w, h] = frame.rect;
-    const cols = Math.max(...Object.values(atlas.frames).map((f) => f.rect[0] + f.rect[2]));
-    const rows = Math.max(...Object.values(atlas.frames).map((f) => f.rect[1] + f.rect[3]));
+  const art = atlas && hasSpriteSet(atlas, frameName) ? portraitKey(frameName) : null;
+  const frame = atlas?.frames[art ?? frameName];
+  if (frame && atlas && atlasImage) {
+    const [x, y, w, h] = frame.rect;
+    const [tw, th] = atlas.meta?.size ?? textureExtent(atlas);
     const img = document.createElement('span');
     img.className = 'sprite';
     img.style.backgroundImage = `url(${atlasImage})`;
-    img.style.backgroundSize = `${(cols / w) * 100}% ${(rows / h) * 100}%`;
-    img.style.backgroundPosition = `${cols - w > 0 ? (col / (cols - w)) * 100 : 0}% ${rows - h > 0 ? (row / (rows - h)) * 100 : 0}%`;
+    // Percentages scale the frame to the box whatever the box's size: the image is `tw / w` boxes wide,
+    // and a position of `x / (tw − w)` of the slack lands the frame's left edge on the box's.
+    img.style.backgroundSize = `${((tw / w) * 100).toFixed(3)}% ${((th / h) * 100).toFixed(3)}%`;
+    img.style.backgroundPosition = `${tw - w > 0 ? ((x / (tw - w)) * 100).toFixed(4) : 0}% ${th - h > 0 ? ((y / (th - h)) * 100).toFixed(4) : 0}%`;
     portrait.appendChild(img);
   }
-  const initial = document.createElement('span');
-  initial.className = 'initial';
-  initial.textContent = initialsOf(name, unit);
-  portrait.appendChild(initial);
+  if (art) {
+    portrait.classList.add('art');
+    portrait.dataset.frame = art;
+  } else {
+    const initial = document.createElement('span');
+    initial.className = 'initial';
+    initial.textContent = initialsOf(name, unit);
+    portrait.appendChild(initial);
+  }
   return portrait;
 }
 
@@ -72,4 +78,15 @@ export function initialsOf(name: string, unit: UnitId): string {
   const words = name.split(/\s+/).filter(Boolean);
   const last = words[words.length - 1] ?? String(unit);
   return last.slice(0, 2).toUpperCase();
+}
+
+/** The texture size implied by the frames, for an atlas without `meta` (the placeholder). */
+function textureExtent(atlas: AtlasJson): [number, number] {
+  let w = 1;
+  let h = 1;
+  for (const f of Object.values(atlas.frames)) {
+    w = Math.max(w, f.rect[0] + f.rect[2]);
+    h = Math.max(h, f.rect[1] + f.rect[3]);
+  }
+  return [w, h];
 }

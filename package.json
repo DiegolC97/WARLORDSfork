@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check:deps": "depcruise src --config .dependency-cruiser.cjs",
     "check:names": "node scripts/check-names.mjs",
-    "check:roster": "node scripts/check-roster.mjs"
+    "check:roster": "node scripts/check-roster.mjs",
+    "build:atlases": "node scripts/build-unit-atlases.mjs"
   },
   "dependencies": {
     "playcanvas": "2.22.4"
