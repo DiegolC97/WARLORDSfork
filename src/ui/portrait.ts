@@ -8,7 +8,7 @@
  * they read the same atlas json and agree on how a unit looks.
  */
 import type { LoadedAssets } from '../assets/loader';
-import { hasSpriteSet, portraitKey, type AtlasDocument, type UnitId } from '../roster';
+import { cssRect, hasSpriteSet, portraitKey, type AtlasDocument, type UnitId } from '../roster';
 
 /** The atlas json as the loader parses it. */
 export type AtlasJson = AtlasDocument;
@@ -50,8 +50,8 @@ export function buildPortrait(unit: UnitId, frameName: string, tint: string, sou
   const art = atlas && hasSpriteSet(atlas, frameName) ? portraitKey(frameName) : null;
   const frame = atlas?.frames[art ?? frameName];
   if (frame && atlas && atlasImage) {
-    const [x, y, w, h] = frame.rect;
     const [tw, th] = atlas.meta?.size ?? textureExtent(atlas);
+    const [x, y, w, h] = cssRect(atlas, frame, [tw, th]);
     const img = document.createElement('span');
     img.className = 'sprite';
     img.style.backgroundImage = `url(${atlasImage})`;

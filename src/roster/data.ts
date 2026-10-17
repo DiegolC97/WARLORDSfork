@@ -83,6 +83,13 @@ export interface WalkCycle {
   readonly fixedSpeed: number | null;
 }
 
+/**
+ * The size class of a unit's figure, which fixes the frame envelope its
+ * art must fit in (`frameEnvelope` in `atlas.ts`): a foot soldier, a rider
+ * on a mount, or a giant.
+ */
+export type Stature = 'foot' | 'mounted' | 'giant';
+
 export interface UnitDefinition {
   readonly id: UnitId;
   /** Base horizontal movement per frame (the shop shows this even when the walk is fixed). */
@@ -108,6 +115,8 @@ export interface UnitDefinition {
   readonly attacks: readonly Attack[];
   /** Frame key inside the race atlas that draws this unit. */
   readonly sprite: string;
+  /** Size class of the figure; the atlas contract derives the frame envelope from it. */
+  readonly stature: Stature;
 }
 
 /**
@@ -221,12 +230,12 @@ const SPEARMAN_SHIELD_BASH: MeleeAttack = melee(18, [7], 100, [20], { upgraded: 
 export const UNITS: Readonly<Record<UnitId, UnitDefinition>> = {
   0: {
     id: 0, speed: 5, hitPoints: 37, recharge: 50, range: 130, cost: 250, shownMaxDamage: 20,
-    walk: WALK, upgradeTrack: 'spear', sprite: 'spearman',
+    walk: WALK, upgradeTrack: 'spear', sprite: 'spearman', stature: 'foot',
     attacks: [melee(15, [4], 130, [10]), melee(15, [4], 130, [20]), melee(15, [4], 130, [10]), SPEARMAN_SHIELD_BASH],
   },
   1: {
     id: 1, speed: 3, hitPoints: 100, recharge: 70, range: 100, cost: 600, shownMaxDamage: 35,
-    walk: WALK, upgradeTrack: 'sword', sprite: 'swordsman',
+    walk: WALK, upgradeTrack: 'sword', sprite: 'swordsman', stature: 'foot',
     attacks: [
       melee(13, [5], 100, [25]),
       melee(13, [5], 100, [25]),
@@ -236,47 +245,47 @@ export const UNITS: Readonly<Record<UnitId, UnitDefinition>> = {
   },
   2: {
     id: 2, speed: 2, hitPoints: 15, recharge: 70, range: 1500, cost: 500, shownMaxDamage: 10,
-    walk: { clip: 40, movingFrames: 40, fixedSpeed: null }, upgradeTrack: 'archery', sprite: 'archer',
+    walk: { clip: 40, movingFrames: 40, fixedSpeed: null }, upgradeTrack: 'archery', sprite: 'archer', stature: 'foot',
     attacks: [projectile('arrow', 33, 17, 10, 70, 7, { walkAfter: 40 })],
   },
   3: {
     id: 3, speed: 3, hitPoints: 10, recharge: 180, range: 1000, cost: 900, shownMaxDamage: 50,
-    walk: WALK_FIXED_5, upgradeTrack: null, sprite: 'mage',
+    walk: WALK_FIXED_5, upgradeTrack: null, sprite: 'mage', stature: 'foot',
     attacks: [projectile('magic', 40, 24, 50, 60, 4, { archeryAffectsDrift: false })],
   },
   4: {
     id: 4, speed: 6, hitPoints: 100, recharge: 180, range: 200, cost: 1400, shownMaxDamage: 20,
-    walk: { clip: 8, movingFrames: 8, fixedSpeed: null }, upgradeTrack: 'spear', sprite: 'mounted-spearman',
+    walk: { clip: 8, movingFrames: 8, fixedSpeed: null }, upgradeTrack: 'spear', sprite: 'mounted-spearman', stature: 'mounted',
     attacks: [melee(10, [4], 130, [20], { movement: 'own-speed' })],
   },
   5: {
     id: 5, speed: 2, hitPoints: 40, recharge: 60, range: 130, cost: 500, shownMaxDamage: 40,
-    walk: WALK, upgradeTrack: 'halberd', sprite: 'halberdier',
+    walk: WALK, upgradeTrack: 'halberd', sprite: 'halberdier', stature: 'foot',
     attacks: [melee(22, [7], 130, [35]), melee(22, [10], 130, [40])],
   },
   6: {
     id: 6, speed: 8, hitPoints: 60, recharge: 150, range: 200, cost: 1100, shownMaxDamage: 45,
-    walk: { clip: 10, movingFrames: 10, fixedSpeed: null }, upgradeTrack: 'halberd', sprite: 'mounted-halberdier',
+    walk: { clip: 10, movingFrames: 10, fixedSpeed: null }, upgradeTrack: 'halberd', sprite: 'mounted-halberdier', stature: 'mounted',
     attacks: [melee(21, [6], 130, [45], { movement: 'own-speed' })],
   },
   7: {
     id: 7, speed: 10, hitPoints: 10, recharge: 60, range: 60, cost: 400, shownMaxDamage: 10,
-    walk: WALK, upgradeTrack: null, sprite: 'scout',
+    walk: WALK, upgradeTrack: null, sprite: 'scout', stature: 'foot',
     attacks: [melee(17, [8], 60, [10], { upgraded: false }), melee(17, [8], 60, [10], { upgraded: false })],
   },
   8: {
     id: 8, speed: 3, hitPoints: 100, recharge: 130, range: 100, cost: 1000, shownMaxDamage: 60,
-    walk: WALK, upgradeTrack: 'sword', sprite: 'longswordsman',
+    walk: WALK, upgradeTrack: 'sword', sprite: 'longswordsman', stature: 'foot',
     attacks: [melee(28, [13], 130, [60]), melee(17, [11], 140, [40], { upgraded: false })],
   },
   9: {
     id: 9, speed: 3, hitPoints: 40, recharge: 60, range: 100, cost: 900, shownMaxDamage: 60,
-    walk: WALK, upgradeTrack: 'axe', sprite: 'battle-axeman',
+    walk: WALK, upgradeTrack: 'axe', sprite: 'battle-axeman', stature: 'foot',
     attacks: [melee(28, [13], 109, [60])],
   },
   10: {
     id: 10, speed: 5, hitPoints: 100, recharge: 160, range: 160, cost: 1600, shownMaxDamage: 35,
-    walk: WALK, upgradeTrack: 'halberd', sprite: 'whirler', // sword-wielding, scales with Halberd in the original
+    walk: WALK, upgradeTrack: 'halberd', sprite: 'whirler', stature: 'foot', // sword-wielding, scales with Halberd in the original
     attacks: [
       melee(17, [7, 12], 160, [35, 35], { movement: 'own-speed' }),
       melee(10, [3, 6], 130, [35, 25], { movement: 'own-speed' }),
@@ -284,22 +293,22 @@ export const UNITS: Readonly<Record<UnitId, UnitDefinition>> = {
   },
   11: {
     id: 11, speed: 3, hitPoints: 40, recharge: 70, range: 750, cost: 600, shownMaxDamage: 20,
-    walk: WALK_FIXED_5, upgradeTrack: 'archery', sprite: 'axe-thrower',
+    walk: WALK_FIXED_5, upgradeTrack: 'archery', sprite: 'axe-thrower', stature: 'foot',
     attacks: [projectile('axe', 40, 24, 20, 40, 7)],
   },
   12: {
     id: 12, speed: 2, hitPoints: 50, recharge: 120, range: 1700, cost: 1300, shownMaxDamage: 10,
-    walk: WALK, upgradeTrack: 'archery', sprite: 'ranger',
+    walk: WALK, upgradeTrack: 'archery', sprite: 'ranger', stature: 'foot',
     attacks: [projectile('arrow', 18, 7, 10, 70, 7)],
   },
   13: {
     id: 13, speed: 4, hitPoints: 50, recharge: 130, range: 750, cost: 800, shownMaxDamage: 25,
-    walk: WALK_FIXED_5, upgradeTrack: 'archery', sprite: 'javelin-thrower',
+    walk: WALK_FIXED_5, upgradeTrack: 'archery', sprite: 'javelin-thrower', stature: 'foot',
     attacks: [projectile('javelin', 28, 12, 25, 70, 5)],
   },
   14: {
     id: 14, speed: 6, hitPoints: 130, recharge: 130, range: 130, cost: 1200, shownMaxDamage: 45,
-    walk: WALK_FIXED_5, upgradeTrack: null, sprite: 'spearmaster',
+    walk: WALK_FIXED_5, upgradeTrack: null, sprite: 'spearmaster', stature: 'foot',
     attacks: [
       melee(27, [19], 150, [45], { upgraded: false, movement: 'forward-5' }),
       melee(18, [11], 160, [40], { upgraded: false, movement: 'back-6' }),
@@ -308,22 +317,22 @@ export const UNITS: Readonly<Record<UnitId, UnitDefinition>> = {
   },
   15: {
     id: 15, speed: 5, hitPoints: 80, recharge: 100, range: 110, cost: 500, shownMaxDamage: 45,
-    walk: WALK, upgradeTrack: 'axe', sprite: 'axeman',
+    walk: WALK, upgradeTrack: 'axe', sprite: 'axeman', stature: 'foot',
     attacks: [melee(15, [7], 70, [35], { movement: 'own-speed' }), melee(15, [8], 70, [45], { movement: 'own-speed' })],
   },
   16: {
     id: 16, speed: 5, hitPoints: 220, recharge: 400, range: 250, cost: 3200, shownMaxDamage: 500,
-    walk: { clip: 19, movingFrames: 11, fixedSpeed: null }, upgradeTrack: null, sprite: 'giant-troll',
+    walk: { clip: 19, movingFrames: 11, fixedSpeed: null }, upgradeTrack: null, sprite: 'giant-troll', stature: 'giant',
     attacks: [melee(26, [17], 250, [250], { upgraded: false }), melee(13, [7], 90, [500], { upgraded: false })],
   },
   17: {
     id: 17, speed: 3, hitPoints: 100, recharge: 180, range: 165, cost: 1300, shownMaxDamage: 100,
-    walk: WALK, upgradeTrack: null, sprite: 'flailer',
+    walk: WALK, upgradeTrack: null, sprite: 'flailer', stature: 'foot',
     attacks: [melee(18, [9], 165, [100], { upgraded: false, movement: 'own-speed' })],
   },
   18: {
     id: 18, speed: 4, hitPoints: 120, recharge: 180, range: 130, cost: 1600, shownMaxDamage: 90,
-    walk: WALK, upgradeTrack: 'sword', sprite: 'kings-guard',
+    walk: WALK, upgradeTrack: 'sword', sprite: 'kings-guard', stature: 'foot',
     attacks: [melee(30, [10, 22], 130, [60, 60]), melee(19, [5, 13], 130, [20, 90])],
   },
 };

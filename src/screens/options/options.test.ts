@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp, type App } from '../../app';
+import { HeadlessEngineHost } from '../../engine/headlessHost';
 import { NullEngineHost } from '../../engine/nullHost';
+import { fieldBandOnScreen, fieldHandle } from '../../render';
 import { MemoryStorage, SaveStore } from '../../save';
 
 let overlayRoot: HTMLElement;
@@ -51,10 +55,15 @@ describe('options', () => {
     expect(stage.style.transform).toBe('scale(1.25)');
   });
 
-  it('the battle screen scales its scene root by the zoom', async () => {
-    const scales: number[][] = [];
-    const host = new NullEngineHost();
-    host.createSceneRoot = () => ({ setLocalScale: (x: number, y: number, z: number) => void scales.push([x, y, z]), destroy() {} }) as never;
+  it('the battle screen renders its field at the saved zoom', async () => {
+    const readPublic = (url: string) => {
+      try {
+        return readFileSync(join(process.cwd(), 'public', url), 'utf8');
+      } catch {
+        return null;
+      }
+    };
+    const host = new HeadlessEngineHost({ width: 1400, height: 900, readText: readPublic });
     document.body.innerHTML = '<div id="ui"></div>';
     overlayRoot = document.getElementById('ui')!;
     const store = new SaveStore({ storage });
@@ -62,6 +71,12 @@ describe('options', () => {
     app = await createApp({ host, overlayRoot, storage });
     await app.shell.navigate('ready');
     await app.shell.navigate('twoPlayer');
-    expect(scales).toEqual([[0.75, 0.75, 0.75]]);
+    const field = fieldHandle(overlayRoot.querySelector<HTMLElement>('[data-screen="battle"]')!)!;
+    expect(field.view.zoom).toBe(0.75);
+    // The engine camera's viewport is the field band at that zoom: 525 px wide on the canvas.
+    const band = fieldBandOnScreen(0.75, 1400, 900);
+    expect(field.view.camera.camera!.rect.z * 1400).toBeCloseTo(band.width, 6);
+    expect(band.width).toBeCloseTo(0.75 * 700.53, 1);
+    host.destroy();
   });
 });

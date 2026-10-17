@@ -1,18 +1,26 @@
 /**
- * Battle screen geometry — the reference layout is the original's 700 × 500
- * stage. Everything is laid out in stage pixels; the stage is then scaled by
- * the saved zoom. Field units (the simulation's x and lane) are mapped onto
- * the field band by `fieldX` / `laneY`.
+ * Battle screen geometry — the DOM side of the original's 700 × 500 stage.
+ * The HUD, rack and footer bands are laid out in stage pixels at zoom 1 and
+ * the stage is CSS-scaled by the saved zoom. Anything placed by a field
+ * position (lane arrows, the backdrop's lane lines) goes through the render
+ * constant (`src/render/scale.ts`) at zoom 1, so it lines up with the
+ * engine's field band, which the camera scales by the same zoom.
  */
-import { FIELD, LANE_COUNT } from '../../battle';
+import { FIELD } from '../../battle';
+import { FIELD_BAND_UNITS, STAGE_HEIGHT, STAGE_WIDTH, fieldProjection } from '../../render/scale';
 
-export const STAGE_WIDTH = 700;
-export const STAGE_HEIGHT = 500;
+export { STAGE_HEIGHT, STAGE_WIDTH };
+
+/** The stage at zoom 1: field units → stage pixels. */
+const stage = fieldProjection(1);
 
 /** The top HUD band: territory bar, dial, charge meters. */
 export const HUD_TOP = { y: 0, height: 46 } as const;
-/** The band the lanes occupy. */
-export const FIELD_BAND = { y: 48, height: 312 } as const;
+/** The band the lanes occupy — the engine camera's viewport — in stage pixels. */
+export const FIELD_BAND = {
+  y: stage.y(FIELD_BAND_UNITS.top),
+  height: stage.length(FIELD_BAND_UNITS.bottom - FIELD_BAND_UNITS.top),
+} as const;
 /** The spawner racks. */
 export const RACK_BAND = { y: 364, height: 100 } as const;
 /** The footer controls. */
@@ -28,24 +36,22 @@ export const RACK_HEADER_HEIGHT = 14;
 export const RACK_BUTTON_HEIGHT = 41;
 export const RACK_BUTTON_MAX_WIDTH = 120;
 
-export const LANE_HEIGHT = FIELD_BAND.height / LANE_COUNT;
+/** Stage pixels between lane baselines: 150 field units. */
+export const LANE_HEIGHT = stage.length(150);
 
 /** Stage y of a lane's baseline (units stand on it). */
 export function laneY(lane: number): number {
-  return FIELD_BAND.y + lane * LANE_HEIGHT - 4;
+  return stage.y(FIELD.laneY(lane));
 }
-
-/** Stage pixels per field unit of height: a lane's 150 field units span one lane band. */
-export const PIXELS_PER_FIELD_Y = LANE_HEIGHT / 150;
 
 /** Stage pixels above a lane's baseline for a field height (a projectile's `y`). */
 export function fieldHeight(y: number): number {
-  return y * PIXELS_PER_FIELD_Y;
+  return stage.length(y);
 }
 
-/** Stage x of a field x: exits at the stage edges. */
+/** Stage x of a field x. */
 export function fieldX(x: number): number {
-  return ((x - FIELD.minX) / (FIELD.maxX - FIELD.minX)) * STAGE_WIDTH;
+  return stage.x(x);
 }
 
 export interface RackGrid {

@@ -1,11 +1,13 @@
 /**
  * The battlefield backdrop as inline SVG sized to the stage: sky and
  * horizon, a castle on the left skyline, a tree line on the right, and the
- * field band with its eight faint lane lines. Art-free on purpose: the art
- * slice swaps the drawing for textures at the same stage coordinates.
+ * ground under the racks. The field band itself is left transparent: the
+ * engine draws the ground and the lane lines there, under the units
+ * (`src/render/fieldView.ts`), through the same render constant that
+ * places this drawing's horizon. Art-free on purpose: the art slice swaps
+ * the drawing for textures at the same stage coordinates.
  */
-import { LANE_COUNT } from '../../battle';
-import { FIELD_BAND, LANE_HEIGHT, STAGE_HEIGHT, STAGE_WIDTH } from './layout';
+import { FIELD_BAND, STAGE_HEIGHT, STAGE_WIDTH } from './layout';
 
 const SVG = 'http://www.w3.org/2000/svg';
 
@@ -52,12 +54,7 @@ export function buildBackdrop(): SVGSVGElement {
     trees.appendChild(el('path', { d: `M${x} ${horizon} L${x + 10} ${horizon - h} L${x + 20} ${horizon} Z` }));
   }
   svg.appendChild(trees);
-  // The field: eight lanes with faint separators.
-  svg.appendChild(el('rect', { x: 0, y: FIELD_BAND.y, width: STAGE_WIDTH, height: FIELD_BAND.height, fill: '#5e7f45' }));
-  for (let lane = 1; lane <= LANE_COUNT; lane++) {
-    const y = FIELD_BAND.y + lane * LANE_HEIGHT;
-    svg.appendChild(el('line', { x1: 0, y1: y, x2: STAGE_WIDTH, y2: y, stroke: '#4c6a38', 'stroke-width': 1 }));
-  }
+  // The field band is the engine's: nothing is drawn over it here.
   // The ground under the racks and footer.
   svg.appendChild(
     el('rect', { x: 0, y: FIELD_BAND.y + FIELD_BAND.height, width: STAGE_WIDTH, height: STAGE_HEIGHT - FIELD_BAND.y - FIELD_BAND.height, fill: '#2b2622' }),

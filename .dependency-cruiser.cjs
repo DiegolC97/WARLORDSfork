@@ -35,11 +35,11 @@ module.exports = {
       severity: 'error',
       comment:
         'The battle simulation (src/battle) knows only field units and ticks: it must never reach rendering or ' +
-        'engine code — no screen, no engine host, no UI, no shell, no app entry, and never the PlayCanvas package. ' +
-        'Art and resolution change underneath it; a rule never changes for them.',
+        'engine code — no screen, no renderer, no engine host, no UI, no shell, no app entry, and never the PlayCanvas ' +
+        'package. Art and resolution change underneath it; a rule never changes for them.',
       from: { path: '^src/battle/' },
       to: {
-        path: '^src/(screens|engine|ui|shell|assets)/|^src/(app|main)\\.ts$|^node_modules/playcanvas',
+        path: '^src/(screens|render|engine|ui|shell|assets)/|^src/(app|main)\\.ts$|^node_modules/playcanvas',
       },
     },
     {

@@ -1,3 +1,4 @@
+import * as pc from 'playcanvas';
 import { applyVictory, battleSetup, isRegionId, type BattleSetup } from '../../campaign';
 import {
   FRAMES_PER_SECOND,
@@ -22,6 +23,7 @@ import {
   type RaceId,
   type UpgradeTrack,
 } from '../../roster';
+import { SpriteLibrary, attachFieldHandle, createFieldView, createUnitLayer, type FieldView, type UnitLayer } from '../../render';
 import type { BattleResult, CampaignSave } from '../../save';
 import type { ScreenContext, ScreenDefinition } from '../../shell/screen';
 import { atlasAssetId, atlasFromAssets } from '../../ui/portrait';
@@ -30,16 +32,23 @@ import { buildHud } from './hud';
 import { bindBattleInput } from './input';
 import { STAGE_HEIGHT, STAGE_WIDTH, laneY } from './layout';
 import { buildRack } from './rack';
-import { buildUnitLayer } from './units';
 
 /**
  * The battle screen. It renders the simulation's frame snapshot — scores,
- * territory bar, timer, both spawners and every unit — on the original's
- * 700 × 500 stage scaled by the saved zoom, and sends spawner commands back
- * from the keyboard and the rack. It holds no rule: what a unit costs to
- * release, when a side wins and what a kill is worth all come out of the
- * snapshot. On a decided winner it writes the outcome to the save (the
- * region on a campaign victory) and hands over to the result screen.
+ * territory bar, timer, both spawners and every unit — and sends spawner
+ * commands back from the keyboard and the rack. It holds no rule: what a
+ * unit costs to release, when a side wins and what a kill is worth all
+ * come out of the snapshot. On a decided winner it writes the outcome to
+ * the save (the region on a campaign victory) and hands over to the result
+ * screen.
+ *
+ * Two layers share the original's 700 × 500 stage: the HUD, racks and
+ * footer are DOM, laid out at zoom 1 and CSS-scaled by the saved zoom; the
+ * field — ground, lane lines, units, projectiles — is the engine's
+ * (`src/render`), a scene in field units seen through a camera whose
+ * viewport is the stage's field band at that zoom. Both go through the one
+ * render constant, so they line up at any zoom. Headless (no engine app)
+ * the field is simply not drawn.
  *
  * In a campaign the save's `battleRegion` names the region under attack and
  * the computer drives the right spawner; with no `battleRegion` (the
@@ -50,9 +59,17 @@ const FRAME_SECONDS = 1 / FRAMES_PER_SECOND;
 /** Never simulate more than this much wall-clock time per rendered frame (tab was hidden). */
 const MAX_CATCH_UP_SECONDS = 0.25;
 
+/** The manifest id a race's atlas is declared under as an engine texture atlas (the json is declared beside it for the racks' portraits). */
+export function spriteAtlasAssetId(url: string): string {
+  return `sprites:${url}`;
+}
+
 export const battleScreen: ScreenDefinition = {
   id: 'battle',
-  assets: referencedAtlases().map((url) => ({ id: atlasAssetId(url), type: 'json' as const, url })),
+  assets: referencedAtlases().flatMap((url) => [
+    { id: atlasAssetId(url), type: 'json' as const, url },
+    { id: spriteAtlasAssetId(url), type: 'textureatlas' as const, url },
+  ]),
   create: () => {
     let dispose: () => void = () => {};
     return {
@@ -69,8 +86,8 @@ export const battleScreen: ScreenDefinition = {
 function mountBattle(ctx: ScreenContext): () => void {
   const save = ctx.campaign.read();
   const { zoom } = save;
-  ctx.root?.setLocalScale(zoom, zoom, zoom);
-  ctx.setClearColor(0.12, 0.05, 0.05);
+  // The screen's own background, behind the stage; the DOM overlay is transparent so the engine shows through.
+  ctx.setClearColor(0.102, 0.086, 0.071);
   const overlay = ctx.overlay;
   overlay.classList.add('battle');
   overlay.dataset.zoom = String(zoom);
@@ -131,7 +148,31 @@ function mountBattle(ctx: ScreenContext): () => void {
   const atlasFor = (race: RaceId | null) => atlasFromAssets(ctx.assets, race ? raceVisuals(race).atlas : referencedAtlases()[0]);
   const leftAtlas = atlasFor(leftRace);
   const rightAtlas = atlasFor(rightRace);
-  const unitLayer = buildUnitLayer(field, { left: leftRace, right: rightRace ?? leftRace }, { left: leftAtlas, right: rightAtlas });
+
+  // ---- the engine's field: camera, ground, units — absent headless
+  const drawnRaces: Record<Side, RaceId> = { left: leftRace, right: rightRace ?? leftRace };
+  let fieldView: FieldView | null = null;
+  let unitLayer: UnitLayer | null = null;
+  let library: SpriteLibrary | null = null;
+  if (ctx.app && ctx.root) {
+    const atlases: Partial<Record<RaceId, pc.TextureAtlas>> = {};
+    for (const race of new Set(Object.values(drawnRaces))) {
+      const id = spriteAtlasAssetId(raceVisuals(race).atlas);
+      const resource = ctx.assets.has(id) ? ctx.assets.get<unknown>(id) : null;
+      if (resource instanceof pc.TextureAtlas) atlases[race] = resource;
+    }
+    library = new SpriteLibrary(ctx.app.graphicsDevice, atlases);
+    fieldView = createFieldView(ctx.app, ctx.root, zoom);
+    unitLayer = createUnitLayer({
+      app: ctx.app,
+      root: ctx.root,
+      library,
+      flat: fieldView.flat,
+      races: drawnRaces,
+      tints: { left: raceVisuals(drawnRaces.left).tint, right: raceVisuals(drawnRaces.right).tint },
+    });
+    attachFieldHandle(overlay, { view: fieldView, units: unitLayer, library });
+  }
   const arrows = {} as Record<Side, HTMLDivElement>;
   for (const side of ['left', 'right'] as const) {
     const arrow = document.createElement('div');
@@ -248,7 +289,7 @@ function mountBattle(ctx: ScreenContext): () => void {
     hud.update(frame);
     leftRack.update(frame);
     rightRack.update(frame);
-    unitLayer.update(frame);
+    unitLayer?.update(frame);
     for (const side of ['left', 'right'] as const) {
       const lane = frame.spawners[side].lane;
       arrows[side].style.top = `${laneY(lane) - 18}px`;
@@ -301,6 +342,7 @@ function mountBattle(ctx: ScreenContext): () => void {
     if (frame.winner && ++framesSinceDecision >= RESULT_AUTO_CONTINUE_FRAMES) finish();
   };
   ctx.onFrame((dt) => {
+    fieldView?.layout();
     accumulator += Math.min(dt, MAX_CATCH_UP_SECONDS);
     while (accumulator >= FRAME_SECONDS - 1e-9 && !finished) {
       accumulator -= FRAME_SECONDS;
@@ -314,6 +356,10 @@ function mountBattle(ctx: ScreenContext): () => void {
   return () => {
     input.dispose();
     attachBattleHandle(overlay, null);
+    attachFieldHandle(overlay, null);
+    unitLayer?.destroy();
+    fieldView?.destroy();
+    library?.destroy();
   };
 }
 

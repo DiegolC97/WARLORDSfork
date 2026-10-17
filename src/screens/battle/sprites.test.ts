@@ -9,12 +9,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as pc from 'playcanvas';
 import { createApp, type App } from '../../app';
-import type { AssetBackend, AssetSpec } from '../../assets/loader';
-import { battleHandle, createBattle, type BattleHandle, type ClipName, type Side } from '../../battle';
+import { FIELD, battleHandle, createBattle, type BattleHandle, type ClipName, type Side } from '../../battle';
 import { BLOCS, PLAYER_OWNER, REGION_IDS, type RegionOwners } from '../../campaign';
-import { NullEngineHost } from '../../engine/nullHost';
+import { HeadlessEngineHost } from '../../engine/headlessHost';
+import { ACCENT_COLOURS, ATLAS_PIXELS_PER_FIELD_UNIT, fieldBandOnScreen, fieldHandle, type FieldHandle, type UnitSprite } from '../../render';
 import {
+  ATLAS_CONTRACT,
   ATLAS_SCALE,
   BLOC_RACES,
   RACE_DEFINITIONS,
@@ -29,7 +31,6 @@ import {
   type RaceId,
 } from '../../roster';
 import { MemoryStorage, SaveStore, defaultSave, type CampaignSave } from '../../save';
-import { laneY } from './layout';
 
 const SPEARMAN = 0;
 const TEXTURE_LIMIT = 1024;
@@ -55,13 +56,14 @@ function seeded(seed: number): () => number {
   };
 }
 
-/** A headless host whose asset backend parses json from public/, so screens see the real atlases. */
-class FileAssetHost extends NullEngineHost {
-  override readonly assetBackend: AssetBackend = {
-    load: async (spec: AssetSpec) => (spec.type === 'json' ? JSON.parse(readFileSync(join(process.cwd(), 'public', spec.url), 'utf8')) : { id: spec.id, url: spec.url }),
-    unload: () => {},
-  };
-}
+/** The atlases as the build check and the loader read them, so the headless engine draws the real sprites. */
+const readPublic = (url: string): string | null => {
+  try {
+    return readFileSync(join(process.cwd(), 'public', url), 'utf8');
+  } catch {
+    return null;
+  }
+};
 
 describe('the six atlases honour the contract (AC 1, AC 4)', () => {
   it.each(BLOC_RACES)('%s: a complete Spearman sprite set, inside a single texture no larger than 1024 × 1024', (race) => {
@@ -69,6 +71,8 @@ describe('the six atlases honour the contract (AC 1, AC 4)', () => {
     expect(hasSpriteSet(doc, 'spearman')).toBe(true);
     expect(contractProblems(doc, SPEARMAN)).toEqual([]);
     expect(doc.meta?.scale).toBe(ATLAS_SCALE);
+    expect(doc.meta?.origin).toBe('bottom-left');
+    expect(doc.meta?.contract).toBe(ATLAS_CONTRACT);
     const [w, h] = doc.meta!.size;
     expect(w).toBeLessThanOrEqual(TEXTURE_LIMIT);
     expect(h).toBeLessThanOrEqual(TEXTURE_LIMIT);
@@ -195,7 +199,7 @@ describe('one recorded Spearman replay against every atlas (AC 2)', () => {
 describe('the battle screen draws the atlas frame the simulation reports (AC 2, AC 5, AC 6, AC 8)', () => {
   let overlayRoot: HTMLElement;
   let storage: MemoryStorage;
-  let host: FileAssetHost;
+  let host: HeadlessEngineHost;
   let app: App;
 
   /** Everything the player's except one region defended by `race`, so that region is the only attack. */
@@ -210,7 +214,7 @@ describe('the battle screen draws the atlas frame the simulation reports (AC 2, 
     new SaveStore({ storage }).write(save);
     document.body.innerHTML = '<div id="ui"></div>';
     overlayRoot = document.getElementById('ui')!;
-    host = new FileAssetHost();
+    host = new HeadlessEngineHost({ width: 1400, height: 900, readText: readPublic });
     app = await createApp({ host, overlayRoot, storage });
     await app.shell.navigate('ready');
   };
@@ -222,6 +226,7 @@ describe('the battle screen draws the atlas frame the simulation reports (AC 2, 
   };
   const battle = () => overlayRoot.querySelector<HTMLElement>('[data-screen="battle"]')!;
   const handle = (): BattleHandle => battleHandle(battle())!;
+  const field = (): FieldHandle => fieldHandle(battle())!;
 
   const startAgainst = async (race: BlocRaceId) => {
     await boot({ ...defaultSave(), chosenRace: 'race1', regionOwners: ownersFacing(race), ownedUnits: [SPEARMAN], battleRegion: null });
@@ -246,20 +251,31 @@ describe('the battle screen draws the atlas frame the simulation reports (AC 2, 
     host.tick(2);
   };
 
-  const spriteOf = (side: Side) => battle().querySelector<HTMLElement>(`.unit.${side}.sprite[data-unit="${SPEARMAN}"]`)!;
-  const px = (v: string) => parseFloat(v);
+  const spriteOf = (side: Side): UnitSprite => [...field().units.sprites().values()].find((s) => s.side === side && s.unit === SPEARMAN && !s.placeholder)!;
+  const meshOf = (c: pc.SpriteComponent) => (c as unknown as { _meshInstance: pc.MeshInstance })._meshInstance;
+  /** The world box of the frame a sprite component draws. */
+  const drawnBox = (c: pc.SpriteComponent) => {
+    const mi = meshOf(c);
+    const box = new pc.BoundingBox();
+    box.setFromTransformedAabb(mi.mesh.aabb, mi.node.getWorldTransform());
+    return box;
+  };
 
   /** Every drawn sprite shows exactly the frame its unit's clip and frame resolve to in its side's atlas. */
   const expectNoDesync = (races: Record<Side, RaceId>): number => {
     const frame = handle().frame();
-    const sprites = [...battle().querySelectorAll<HTMLElement>('.unit.sprite')];
-    for (const el of sprites) {
-      const u = frame.units.find((x) => x.id === Number(el.dataset.unitId))!;
-      expect(el.dataset.clipFrame).toBe(String(u.clipFrame));
+    const sprites = [...field().units.sprites().values()].filter((s) => !s.placeholder);
+    for (const s of sprites) {
+      const u = frame.units.find((x) => x.id === s.id)!;
+      expect(s.state.clipFrame).toBe(u.clipFrame);
       const resolved = resolveFrame(atlasOf(races[u.side]), u.unit, u.clip, u.clipFrame)!;
-      expect(el.dataset.frame).toBe(resolved.key);
-      const body = el.querySelector<HTMLElement>('.body')!;
-      expect(body.style.backgroundImage).toContain(raceVisuals(races[u.side]).atlas.replace('.json', '.png'));
+      expect(s.frameKey).toBe(resolved.key);
+      expect(s.body.currentClip.name).toBe(resolved.clip);
+      expect(s.body.currentClip.frame).toBe(resolved.frame);
+      expect(s.body.sprite.frameKeys[s.body.currentClip.frame]).toBe(resolved.key);
+      expect(s.body.sprite.atlas.texture.name).toBe(raceVisuals(races[u.side]).atlas.replace(/^.*\//, '').replace('.json', '.png'));
+      expect(s.body.opacity).toBe(u.alpha);
+      expect(s.body.flipX).toBe(u.facing === -1);
     }
     return sprites.length;
   };
@@ -269,32 +285,35 @@ describe('the battle screen draws the atlas frame the simulation reports (AC 2, 
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    host?.destroy();
   });
 
-  it.each(BLOC_RACES)('race1 against %s: both Spearmen are atlas sprites, feet on the lane baseline, frames in step with the simulation', async (race) => {
+  it.each(BLOC_RACES)('race1 against %s: both Spearmen are engine sprites, feet on the lane baseline, frames in step with the simulation', async (race) => {
     await startAgainst(race);
     fieldSpearmen();
     const races: Record<Side, RaceId> = { left: 'race1', right: race };
     for (const side of ['left', 'right'] as const) {
-      const el = spriteOf(side);
-      expect(el, side).toBeTruthy();
-      const u = handle().frame().units.find((x) => x.id === Number(el.dataset.unitId))!;
-      // The unit element is anchored on its lane's baseline; the body hangs off the feet pivot.
-      expect(el.style.top).toBe(`${laneY(u.lane)}px`);
-      const body = el.querySelector<HTMLElement>('.body')!;
+      const s = spriteOf(side);
+      expect(s, side).toBeTruthy();
+      const u = handle().frame().units.find((x) => x.id === s.id)!;
+      // The unit entity is anchored on its lane's baseline at its field x, at the lane's depth.
+      const pos = s.entity.getPosition();
+      expect(pos.x).toBeCloseTo(u.x, 2);
+      expect(pos.y).toBeCloseTo(-FIELD.laneY(u.lane), 2);
       const doc = atlasOf(races[side]);
-      const f = doc.frames[el.dataset.frame!]!;
+      const f = doc.frames[s.frameKey!]!;
       const [, , w, h] = f.rect;
-      expect(px(body.style.width)).toBeCloseTo(w / ATLAS_SCALE, 1);
-      expect(px(body.style.height)).toBeCloseTo(h / ATLAS_SCALE, 1);
-      expect(px(body.style.left)).toBeCloseTo((-f.pivot[0] * w) / ATLAS_SCALE, 1);
-      expect(px(body.style.top)).toBeCloseTo((-f.pivot[1] * h) / ATLAS_SCALE, 1);
-      // Feet on the baseline: only the ground shadow hangs below the anchor, and the figure stands above it.
-      const bottom = px(body.style.top) + px(body.style.height);
-      expect(bottom, `${race} ${side} shadow depth`).toBeGreaterThanOrEqual(0);
-      expect(bottom, `${race} ${side} shadow depth`).toBeLessThanOrEqual(3.5);
-      expect(px(body.style.top), `${race} ${side} height`).toBeLessThan(-20);
-      expect(el.classList.contains('flipped')).toBe(u.facing === -1);
+      const box = drawnBox(s.body);
+      expect(box.halfExtents.x * 2).toBeCloseTo(w / ATLAS_PIXELS_PER_FIELD_UNIT, 3);
+      expect(box.halfExtents.y * 2).toBeCloseTo(h / ATLAS_PIXELS_PER_FIELD_UNIT, 3);
+      // Feet on the baseline: the frame's lowest pixel is the feet (no shadow in the art), within a boot sole (two pixels at zoom 1) of the line.
+      expect(box.getMin().y - pos.y, `${race} ${side} feet`).toBeGreaterThanOrEqual(-8);
+      expect(box.getMin().y - pos.y, `${race} ${side} feet`).toBeLessThanOrEqual(4);
+      expect(box.getMax().y - pos.y, `${race} ${side} height`).toBeGreaterThan(80);
+      expect(s.body.flipX).toBe(u.facing === -1);
+      // A ground shadow lies under the feet.
+      expect(drawnBox(s.shadow).center.y).toBeCloseTo(pos.y, 6);
+      expect(s.shadow.opacity).toBeGreaterThan(0);
     }
     expect(expectNoDesync(races)).toBe(2);
     // Let the two fight, checking every few ticks: no frame ever drifts from the simulation.
@@ -303,45 +322,63 @@ describe('the battle screen draws the atlas frame the simulation reports (AC 2, 
     for (let i = 0; i < 300 && handle().frame().winner === null; i++) {
       host.tick(5);
       checked += expectNoDesync(races);
-      for (const el of battle().querySelectorAll<HTMLElement>('.unit.sprite')) clipsSeen.add(el.dataset.clip!);
+      for (const s of field().units.sprites().values()) clipsSeen.add(s.state.clip);
     }
     expect(checked).toBeGreaterThan(50);
     expect([...clipsSeen].some((c) => c.startsWith('swipe-') || c === 'death')).toBe(true);
   });
 
-  it('race1 against race1: the same race tint and atlas on both sides, told apart by the accent layer alone (AC 5)', async () => {
+  it('race1 against race1: the same atlas untinted on both sides, told apart by the accent layer alone (AC 5)', async () => {
     await startAgainst('race1');
     fieldSpearmen();
     const left = spriteOf('left');
     const right = spriteOf('right');
-    expect(left.style.getPropertyValue('--tint')).toBe(right.style.getPropertyValue('--tint'));
-    expect(left.dataset.frame!.startsWith('spearman/')).toBe(true);
-    expect(right.dataset.frame!.startsWith('spearman/')).toBe(true);
-    expect(left.style.getPropertyValue('--accent')).toBe('#fff');
-    expect(right.style.getPropertyValue('--accent')).toBe('#000');
-    for (const el of [left, right]) {
-      const accent = el.querySelector<HTMLElement>('[data-role="accent"]')!;
-      expect(accent.hidden).toBe(false);
-      // The accent is the atlas's untinted pennant frame used as a mask over the side's value.
-      expect(accent.style.getPropertyValue('mask-image')).toContain('race1.png');
-      const u = handle().frame().units.find((x) => x.id === Number(el.dataset.unitId))!;
+    expect(left.body.sprite.atlas).toBe(right.body.sprite.atlas);
+    expect(left.body.color.toString(false)).toBe(right.body.color.toString(false));
+    expect(left.frameKey!.startsWith('spearman/')).toBe(true);
+    expect(right.frameKey!.startsWith('spearman/')).toBe(true);
+    expect(left.accent.color.toString(false)).toBe(ACCENT_COLOURS.left);
+    expect(right.accent.color.toString(false)).toBe(ACCENT_COLOURS.right);
+    for (const s of [left, right]) {
+      expect(s.accent.enabled).toBe(true);
+      // The accent is the atlas's untinted pennant frame of the same clip and frame, coloured per side.
+      const u = handle().frame().units.find((x) => x.id === s.id)!;
       const resolved = resolveFrame(atlasOf('race1'), SPEARMAN, u.clip, u.clipFrame)!;
+      expect(s.accent.sprite.frameKeys[s.accent.frame]).toBe(resolved.accent);
+      expect(s.accent.sprite.atlas.texture.name).toBe('race1.png');
       const f = atlasOf('race1').frames[resolved.accent!]!;
-      expect(px(accent.style.width)).toBeCloseTo(f.rect[2] / ATLAS_SCALE, 1);
+      expect(drawnBox(s.accent).halfExtents.x * 2).toBeCloseTo(f.rect[2] / ATLAS_PIXELS_PER_FIELD_UNIT, 3);
     }
   });
 
-  it('a unit without a sprite set keeps the placeholder block beside atlas sprites', async () => {
+  it('the field is drawn through the camera at the saved zoom: a 700 px band at zoom 1', async () => {
+    await startAgainst('race2');
+    const view = field().view;
+    expect(view.zoom).toBe(1);
+    const band = fieldBandOnScreen(1, 1400, 900);
+    const rect = view.camera.camera!.rect;
+    expect(rect.z * 1400).toBeCloseTo(band.width, 6);
+    expect(rect.w * 900).toBeCloseTo(band.height, 6);
+    expect(Math.abs(band.width - 700)).toBeLessThan(1);
+    // Lane baselines 36.9 px apart on the canvas.
+    expect(view.toScreen(0, FIELD.laneY(2)).y - view.toScreen(0, FIELD.laneY(1)).y).toBeCloseTo(36.87, 1);
+    // The engine camera renders after the host's, in its own viewport.
+    expect(host.cameras.map((c) => c.priority)).toEqual([0, 1]);
+  });
+
+  it('a unit without a sprite set is the placeholder block beside engine sprites', async () => {
     await startAgainst('race4');
     const sim = handle().simulation;
     while (!sim.snapshot().spawners.right.canRelease) host.tick(1);
     while (sim.snapshot().spawners.right.unit !== 1) sim.command('right', 'next-unit');
     sim.command('right', 'release');
     host.tick(2);
-    const swordsman = battle().querySelector<HTMLElement>('.unit.right[data-unit="1"]')!;
-    expect(swordsman.classList.contains('placeholder')).toBe(true);
-    expect(swordsman.dataset.frame).toBeUndefined();
-    expect(swordsman.querySelector('[data-role="accent"]')).not.toBeNull();
+    const swordsman = [...field().units.sprites().values()].find((s) => s.side === 'right' && s.unit === 1)!;
+    expect(swordsman.placeholder).toBe(true);
+    expect(swordsman.frameKey).toBeNull();
+    expect(swordsman.body.color.toString(false)).toBe(new pc.Color().fromString(raceVisuals('race4').tint).toString(false));
+    expect(swordsman.accent.color.toString(false)).toBe(ACCENT_COLOURS.right);
+    expect(swordsman.shadow.opacity).toBeGreaterThan(0);
   });
 
   it('the spawner rack shows the portrait crop, large enough for the 18 px button (AC 8)', async () => {

@@ -1,11 +1,13 @@
 /**
  * Shelf packing of trimmed frames into one texture, widest-first rows,
- * with a gutter so linear filtering never bleeds a neighbour in. Frames
- * with identical pixels share one rect.
+ * with a gutter so filtering never bleeds a neighbour in: the atlases are
+ * mipmapped and drawn at a quarter size at zoom 1, so the gutter is 8 px —
+ * still 2 px at the second mip level. Frames with identical pixels share
+ * one rect.
  */
 import { createHash } from 'node:crypto';
 
-export const GUTTER = 2;
+export const GUTTER = 8;
 
 /**
  * `frames`: `[{ key, canvas, pivot: [px, py] }]` where `pivot` is in canvas

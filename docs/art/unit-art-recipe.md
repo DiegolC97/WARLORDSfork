@@ -14,12 +14,18 @@ latter two).
 ## 1. The look
 
 The original's flat vector style: solid fills, two tones per material (a
-base colour and a darker back-limb tone), no outlines, an elliptical ground
-shadow at 32 % black under the feet. Every figure faces +x (right); the
-renderer mirrors it for the other side.
+base colour and a darker back-limb tone), no outlines. The ground shadow is
+**not** drawn in the art: the renderer puts a soft ellipse under every unit
+(`src/render/unitLayer.ts`), so a frame's lowest pixel is the feet. Every
+figure faces +x (right); the renderer mirrors it for the other side.
 
 Authoring is at **4×**: the baseline figure stands about 112 px tall in the
-atlas and 28 px in battle (lanes are 39 px apart on the 700 × 500 stage).
+atlas and 28 px in battle at zoom 1 (lanes are 36.9 px apart on the 700 × 500
+stage; one atlas pixel is one field unit at zoom 4, see
+`src/render/scale.ts`). Every frame must fit the unit's **envelope**
+(`frameEnvelope` in `src/roster/atlas.ts`, from the roster's `stature`:
+240 × 200 px for a foot unit, 320 × 240 mounted, 320 × 320 giant); the
+build check rejects a larger frame.
 Keep a unit between 100 and 125 px tall at 4× (25–31 px at 1×); a unit that
 must read shorter or taller does it through `proportions.height`.
 
@@ -29,7 +35,6 @@ A frame is drawn in painter's order, back to front, onto two canvases:
 
 | Layer | Canvas | Content |
 | --- | --- | --- |
-| shadow | body | ground ellipse at the baseline |
 | extras behind | body | tail, cloak |
 | back arm + shield | body | darker tone |
 | back leg | body | darker tone |
@@ -97,8 +102,8 @@ Rules every unit must keep:
    Identical frames are stored once in the atlas, and this is what makes a
    67-frame set fit in 1024²: every per-frame motion (pennant wave, plume
    sway) is driven by `pose.phase`, never by the frame index.
-3. The pivot is the feet. The figure stands on y = 0 in rig space; only the
-   shadow hangs below.
+3. The pivot is the feet. The figure stands on y = 0 in rig space; nothing
+   hangs below it (the renderer draws the shadow).
 4. The art may omit a swipe beyond the first (`clips` in the unit's
    `index.mjs`); the renderer plays the first swipe time-warped with the
    strike pinned. It may not omit `ready`, `walk`, `swipe-1` or `death`.
@@ -140,9 +145,10 @@ palette; it colours the map and the rack background.
 ## 6. Frame layout and keys
 
 The builder trims every frame to its pixels, packs the trimmed rects onto
-shelves in a 1024-wide texture with a 2 px gutter (tallest first), merges
-identical pixels, and writes the JSON in the **atlas contract**
-(`src/roster/atlas.ts`):
+shelves in a 1024-wide texture with an 8 px gutter (tallest first; the
+atlas is mipmapped and drawn at a quarter size at zoom 1, so the gutter is
+still 2 px two mip levels down), merges identical pixels, and writes the
+JSON in the **atlas contract** (`src/roster/atlas.ts`):
 
 ```
 <sprite>/<clip>/<n>           body frame n of the clip
@@ -152,11 +158,15 @@ identical pixels, and writes the JSON in the **atlas contract**
 ```
 
 Each frame is `{ rect: [x, y, w, h], pivot: [px, py], border: [0,0,0,0] }`
-with `rect` in texture pixels from the top-left corner and `pivot` the feet
-as a fraction of the rect (it may fall outside 0…1 for a small frame away
-from the feet, such as a pennant). `meta` carries `scale` (4) and `size`.
-PlayCanvas's own atlas loader measures `y` from the bottom; an engine-sprite
-move flips it as `size[1] − y − h`.
+in the shape PlayCanvas's `textureatlas` loader reads: `rect` in texture
+pixels with `y` measured **from the bottom** of the texture
+(`meta.origin: "bottom-left"`), and `pivot` the feet as a fraction of the
+rect from its bottom-left corner (`[0.5, 0]` is the bottom centre; it may
+fall outside 0…1 for a small frame away from the feet, such as a pennant).
+`meta` carries `scale` (4), `size`, `origin` and `contract` (2); the file
+also sets `minfilter`, `magfilter` and `mipmaps` for the engine's texture.
+DOM drawing (the rack portraits) converts to CSS's top-left origin with
+`cssRect`.
 
 The sprite key is the roster's `sprite` field (`UNITS[id].sprite`).
 

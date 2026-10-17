@@ -1,8 +1,9 @@
 /**
  * The shared Spearman rig: a 2D bone chain (pelvis, spine, head, two arms
  * holding spear and shield, two legs) drawn as flat capsules and polygons
- * in the original's vector look — solid fills, two tones per material, an
- * elliptical ground shadow, no outlines.
+ * in the original's vector look — solid fills, two tones per material, no
+ * outlines. The ground shadow is not drawn here: the renderer puts one
+ * under every unit, so the figure's lowest pixel is the feet.
  *
  * `renderFrame(variant, spec, frame)` poses the rig with `clips.mjs`,
  * applies the variant's proportions, stance offsets and parts, and draws
@@ -18,7 +19,7 @@ import { Canvas, rgba, shade } from '../../lib/raster.mjs';
 import { add, bar, capsule, circle, deg, ellipse, lerp, polar, roundedRect, scale, spikes, sub, taper } from '../../lib/geometry.mjs';
 import { poseFor } from './clips.mjs';
 
-/** Authoring canvas: room for a thrust ahead, a raised spear above and the shadow below. */
+/** Authoring canvas: room for a thrust ahead and a raised spear above; the feet on the baseline. */
 export const FRAME = { width: 232, height: 196, centreX: 104, baseline: 170 };
 export const SPEAR_LENGTH = 96;
 
@@ -242,11 +243,6 @@ export function tipX(variant, spec, frame) {
 }
 
 // ---- drawing
-
-function drawShadow(pt, j, variant, lying) {
-  const w = (lying ? 36 : 22) * j.h * variant.proportions.torsoWidth;
-  pt.ellipse([lying ? j.hip[0] - 6 * j.h : j.hip[0] * 0.5, 0], w, 5 * j.h, 0, '#000000', 0.32);
-}
 
 function drawTail(pt, j, variant, pose) {
   if (!variant.parts.tail) return;
@@ -496,9 +492,7 @@ export function renderFrame(variant, spec, frame) {
   const legCol = P.legs ?? P.secondary;
   const armCol = P.arms ?? P.primary;
   const legDark = shade(legCol, -0.3);
-  const lying = spec.name === 'death' && frame >= spec.frames - 2;
 
-  drawShadow(pt, j, variant, lying);
   drawTail(pt, j, variant, pose);
   // Back limbs first, in the darker tone.
   drawArm(pt, j, j.shB, j.elbowB, j.wristB, j.handB, shade(armCol, -0.25), shade(P.skin, -0.2), variant, false);

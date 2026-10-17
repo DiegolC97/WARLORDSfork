@@ -11,7 +11,10 @@
  * body frames `<sprite>/<clip>/<n>`, accent frames
  * `<sprite>/accent/<clip>/<n>`, `<sprite>/portrait`, and a one-pixel legacy
  * frame `<sprite>` for every unit not yet authored, so `check:roster`
- * keeps passing while the roster fills in.
+ * keeps passing while the roster fills in. Rects are written the way the
+ * engine's texture atlas loader reads them: y from the texture's bottom.
+ * The ground shadow is not in the art — the renderer draws it under every
+ * unit — so a frame's bottom row is the feet.
  *
  * Clip lengths and strike frames come from the roster through Vite's SSR
  * loader (the same source the game ships), so the art can never disagree
@@ -112,7 +115,8 @@ try {
         atlas.blit(p.canvas, p.rect[0], p.rect[1]);
         drawn.add(rectKey);
       }
-      table[key] = { rect: p.rect, pivot: [round3(p.pivot[0]), round3(p.pivot[1])], border: [0, 0, 0, 0] };
+      // The engine's convention: rect y from the texture's bottom, pivot y from the frame's bottom.
+      table[key] = { rect: bottomLeft(p.rect, height), pivot: [round3(p.pivot[0]), round3(1 - p.pivot[1])], border: [0, 0, 0, 0] };
     }
     const legacyRect = packed.placed.get('__legacy').rect;
     atlas.blit(legacy, legacyRect[0], legacyRect[1]);
@@ -120,12 +124,16 @@ try {
     for (const unit of roster.UNIT_IDS) {
       const sprite = roster.UNITS[unit].sprite;
       if (authored.has(sprite)) continue;
-      table[sprite] = { rect: [legacyRect[0] + 1, legacyRect[1] + 1, 1, 1], pivot: [0.5, 1], border: [0, 0, 0, 0] };
+      table[sprite] = { rect: bottomLeft([legacyRect[0] + 1, legacyRect[1] + 1, 1, 1], height), pivot: [0.5, 0], border: [0, 0, 0, 0] };
     }
 
     const json = {
       texture: `${raceId}.png`,
-      meta: { scale: SCALE, size: [TEXTURE, height], origin: 'top-left', contract: 1, generator: 'scripts/build-unit-atlases.mjs' },
+      // Mipmapped minification: the 8 px gutter keeps neighbours out of the first three levels.
+      minfilter: 'linear_mip_linear',
+      magfilter: 'linear',
+      mipmaps: true,
+      meta: { scale: SCALE, size: [TEXTURE, height], origin: 'bottom-left', contract: roster.ATLAS_CONTRACT, generator: 'scripts/build-unit-atlases.mjs' },
       frames: table,
     };
     writeFileSync(join(OUT_DIR, `${raceId}.png`), encodePNG(atlas.width, atlas.height, atlas.toRGBA8()));
@@ -152,6 +160,11 @@ function trimmed(key, canvas, pivot) {
 
 function round3(v) {
   return Math.round(v * 1000) / 1000;
+}
+
+/** A top-left packed rect as the engine reads it: y measured from the texture's bottom. */
+function bottomLeft([x, y, w, h], textureHeight) {
+  return [x, textureHeight - y - h, w, h];
 }
 
 /**

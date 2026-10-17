@@ -1,12 +1,25 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as pc from 'playcanvas';
 import { createApp, type App } from '../../app';
 import { BAR_CENTRE, BAR_PIXELS_PER_POINT, BATTLE_LENGTH_FRAMES, KILLS_PER_CHARGE, LANE_COUNT, RESULT_AUTO_CONTINUE_FRAMES } from '../../battle';
 import { BLOCS, initialOwners } from '../../campaign';
-import { NullEngineHost } from '../../engine/nullHost';
+import { HeadlessEngineHost } from '../../engine/headlessHost';
+import { ACCENT_COLOURS, fieldHandle, type FieldHandle } from '../../render';
 import { exclusiveOf, isUnitId, raceVisuals, starterUnits, unitDisplayName, unitStats, type RaceId, type UnitId } from '../../roster';
 import { MemoryStorage, SaveStore, defaultSave, type CampaignSave } from '../../save';
 import { battleHandle, type BattleHandle } from '../../battle';
 import { RACK_GAP, RACK_SIDE_WIDTH, rackGrid } from './layout';
+
+/** The atlases as the build check and the loader read them, so the engine draws the real sprites. */
+const readPublic = (url: string): string | null => {
+  try {
+    return readFileSync(join(process.cwd(), 'public', url), 'utf8');
+  } catch {
+    return null;
+  }
+};
 
 /** mulberry32, so every battle in this file replays exactly. */
 function seeded(seed: number): () => number {
@@ -22,7 +35,7 @@ function seeded(seed: number): () => number {
 
 let overlayRoot: HTMLElement;
 let storage: MemoryStorage;
-let host: NullEngineHost;
+let host: HeadlessEngineHost;
 let app: App;
 
 const EIGHT: UnitId[] = [0, 1, 2, 3, 4, 5, 6, 18];
@@ -43,7 +56,8 @@ const boot = async (save?: CampaignSave) => {
   if (save) new SaveStore({ storage }).write(save);
   document.body.innerHTML = '<div id="ui"></div>';
   overlayRoot = document.getElementById('ui')!;
-  host = new NullEngineHost();
+  host?.destroy();
+  host = new HeadlessEngineHost({ readText: readPublic });
   app = await createApp({ host, overlayRoot, storage });
   await app.shell.navigate('ready');
 };
@@ -62,6 +76,13 @@ const handle = (): BattleHandle => {
   if (!h) throw new Error('battle screen exposes no handle');
   return h;
 };
+const field = (): FieldHandle => {
+  const f = fieldHandle(battle());
+  if (!f) throw new Error('battle screen draws no field');
+  return f;
+};
+/** The engine sprites of one side's units. */
+const unitsOf = (side: 'left' | 'right') => [...field().units.sprites().values()].filter((s) => s.side === side);
 const q = <T extends HTMLElement>(selector: string): T => {
   const el = battle().querySelector<T>(selector);
   if (!el) throw new Error(`no element ${selector} on the battle screen`);
@@ -108,7 +129,8 @@ describe('spawner rack (AC 1, AC 2)', () => {
       const name = b.querySelector<HTMLElement>('[data-role="unit-name"]')!;
       expect(name.textContent).toBe(unitDisplayName(EIGHT[i]!, 'race1'));
       const portrait = b.querySelector<HTMLElement>('[data-role="portrait"]')!;
-      expect(portrait.dataset.frame).toBe(unitStats(EIGHT[i]!).sprite);
+      // The atlas's portrait crop for a unit with art, the legacy frame for one without.
+      expect(portrait.dataset.frame).toMatch(new RegExp(`^${unitStats(EIGHT[i]!).sprite}(/portrait)?$`));
       expect(portrait.style.background).toContain('rgb(0, 114, 178)'); // race1's tint
     });
     expect(q('[data-role="rack-left"]').dataset.race).toBe('race1');
@@ -184,8 +206,8 @@ describe('lane selection (AC 3)', () => {
     keyDown('Space');
     keyUp('Space');
     host.tick(1);
-    const unit = q('[data-role="units"] .unit.left');
-    expect(unit.dataset.lane).toBe('8');
+    const unit = unitsOf('left')[0]!;
+    expect(unit.state.lane).toBe(8);
     expect(handle().simulation.snapshot().units[0]).toMatchObject({ side: 'left', lane: 8 });
   });
 });
@@ -198,7 +220,7 @@ describe('recharge (AC 4)', () => {
     keyDown('Space');
     keyUp('Space');
     host.tick(1);
-    expect(battle().querySelectorAll('.unit.left')).toHaveLength(0);
+    expect(unitsOf('left')).toHaveLength(0);
     expect(spearman.dataset.recharge).toBe('recharging');
     let spawnedAt: number | null = null;
     for (let i = 0; i < 120; i++) {
@@ -213,7 +235,7 @@ describe('recharge (AC 4)', () => {
       host.tick(1);
     }
     expect(spawnedAt).toBe(unitStats(0).recharge);
-    expect(battle().querySelectorAll('.unit.left')).toHaveLength(1);
+    expect(unitsOf('left')).toHaveLength(1);
   });
 
   it('holding the spawn key yields one unit per recharge period, auto-repeat included (AC 8)', async () => {
@@ -399,14 +421,17 @@ describe('same race on both sides (AC 9)', () => {
     while (!sim.snapshot().spawners.right.canRelease) host.tick(1);
     sim.command('right', 'release');
     host.tick(1);
-    const left = q('.unit.left');
-    const right = q('.unit.right');
-    expect(left.style.getPropertyValue('--tint')).toBe(raceVisuals('race1').tint);
-    expect(right.style.getPropertyValue('--tint')).toBe(raceVisuals('race1').tint);
-    expect(left.dataset.accent).toBe('pennant-white-right');
-    expect(right.dataset.accent).toBe('pennant-black-left');
-    expect(left.querySelector('[data-role="accent"]')).not.toBeNull();
-    expect(right.querySelector('[data-role="accent"]')).not.toBeNull();
+    const left = unitsOf('left')[0]!;
+    const right = unitsOf('right')[0]!;
+    // Both sides draw as race1: a unit with art from race1's atlas untinted, one without as a block in race1's tint.
+    for (const s of [left, right]) {
+      if (s.placeholder) expect(s.body.color.toString(false)).toBe(new pc.Color().fromString(raceVisuals('race1').tint).toString(false));
+      else expect(s.body.sprite.atlas.texture.name).toBe('race1.png');
+    }
+    // Only the accent differs: white on the left, black on the right.
+    expect(left.accent.color.toString(false)).toBe(ACCENT_COLOURS.left);
+    expect(right.accent.color.toString(false)).toBe(ACCENT_COLOURS.right);
+    expect(raceVisuals('race1').tint).toBe(q('[data-role="rack-right"]').dataset.tint);
   });
 });
 

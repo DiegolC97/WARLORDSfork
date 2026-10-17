@@ -46,7 +46,8 @@ this repository. The upstream engine repository is a read-only reference.
 index.html              canvas + overlay root
 src/main.ts             browser entry: creates the PlayCanvas host and boots the app
 src/app.ts              composition root (save store → campaign → shell)
-src/engine/             EngineHost seam: playcanvasHost (real) and nullHost (headless tests); onFrame is the frame clock
+src/engine/             EngineHost seam: playcanvasHost (WebGL), headlessHost (the engine on its null device, for renderer tests), nullHost (no engine); onFrame is the frame clock
+src/render/             the engine renderer: scale.ts (the render constant), spriteLibrary, fieldView (camera), unitLayer (sprites from the snapshot), textures (generated quads and shadow)
 src/assets/loader.ts    manifest-driven asset loading (textures, atlases, json, audio, font)
 src/names/              display names: game title, race names, unit base names and per-race prefixes, region names, credit
 src/save/               the ONLY code that touches stored data (schema, migrations, saveStore)
@@ -97,9 +98,12 @@ The banner image lives at `public/assets/ui/banner-trio.svg`. It is currently
 a placeholder of three silhouettes; the race-art slice replaces that file at
 the same path with the real trio, with no code change.
 
-Options carries sound, music and the rendering zoom. The battle screen scales
-its scene root by the saved zoom, so anything the battle slice parents under
-`ctx.root` inherits it.
+Options carries sound, music and the rendering zoom. The battle screen
+renders at that zoom through one constant, `renderScale(zoom)` =
+`0.2458 × zoom` pixels per field unit (`src/render/scale.ts`): the DOM
+stage is CSS-scaled by it and the engine camera's viewport is sized by it,
+so the HUD, the racks, the field and every unit scale together and no game
+logic sees it.
 
 ### Campaign map
 
@@ -170,9 +174,15 @@ on the lead itself, on the same tick). Each race starts one upgrade track
 at −1 (`RaceDefinition.handicap`); the shop climbs out of it at double cost.
 
 The battle screen (`src/screens/battle/`) renders snapshots and sends
-commands back; it holds no rule. It is a DOM/SVG stage of the original's
-700 × 500 pixels scaled by the saved zoom (`layout.ts` maps field units onto
-the field band):
+commands back; it holds no rule. Two layers share the original's 700 × 500
+stage: the HUD, racks and footer are DOM, laid out at zoom 1 and CSS-scaled
+by the saved zoom; the field band — ground, lane lines, units, projectiles —
+is drawn by the engine (`src/render/`) underneath, a scene in field units
+seen through an orthographic camera whose viewport is the band at that zoom
+(`fieldBandOnScreen`). Both go through the one render constant
+(`renderScale`), so at zoom 1 the band is 700 px wide, lanes are 36.9 px
+apart and a Spearman's 130-unit range is 32 px; at zoom 4 every one of those
+is four times larger and the simulation never knows:
 
 - the **territory bar** draws the width the simulation reports (centre
   plus 14 px per point of lead; full or empty is an instant win) with both
@@ -186,13 +196,24 @@ the field band):
   last row centred); each shows the unit's portrait (the atlas's portrait
   crop over the race tint, or the legacy frame with a two-letter initial for
   a unit without art), its per-race name and its recharge state;
-- **units** are DOM sprites drawn from the race atlas: the frame the
-  simulation's clip and frame resolve to (`resolveFrame`), its feet pivot on
-  the lane baseline, mirrored when facing left, with the atlas's untinted
-  pennant frame as a mask filled with the side's value — white for the left
-  side, black for the right — so two armies of the same race stay telling
+- **units** are engine sprites (`src/render/unitLayer.ts`): each race's
+  atlas is loaded as a `textureatlas` asset and the sprite library
+  (`spriteLibrary.ts`) builds one `pc.Sprite` per contract clip for a unit,
+  resolved by unit plus race and nothing else — the clip names, frame counts
+  and strike frames are the roster's for every race, only the texture
+  differs. A unit is an entity at its feet on the lane baseline, at a depth
+  by lane (lane 1 in front, lane 8 at the back), carrying an animated sprite
+  component whose paused clips the snapshot drives (`clip` and `clipFrame`
+  every tick, so a blow lands on the simulation's strike frame), `flipX` for
+  a unit facing left (one set of frames serves both armies), `opacity` from
+  the snapshot's `alpha` (a body lies 500 ticks, then fades 1 % per tick), a
+  ground shadow underneath, and the atlas's untinted pennant frame as an
+  accent coloured per side — white on the left, black on the right, over a
+  halo of the other value — so two armies of the same race stay telling
   apart. A unit whose atlas has no sprite set yet is a block in the race
-  tint with a CSS pennant;
+  tint with a pennant quad. Headless (no engine) the field is not drawn;
+  renderer tests run the engine on its null device (`src/engine/headlessHost.ts`)
+  and measure entities, clips and the camera's projection;
 - the **footer** carries the level indicator (campaign level, or "2 Player"),
   Main menu, Surrender (hands the battle to the right side), Options and
   Retreat.
@@ -350,13 +371,18 @@ eighteen units still draw as the tinted placeholder block and keep a
 one-pixel legacy frame in every atlas.
 
 `src/roster/atlas.ts` is the **atlas contract** the build check and the
-renderer share: frames keyed `<sprite>/<clip>/<n>` (`ready` 2 frames, `walk`
-the roster's walk cycle, `swipe-i` the i-th attack's clip with its strike
-frame inside, `death` 8), an untinted accent frame
-`<sprite>/accent/<clip>/<n>` per body frame, a `<sprite>/portrait` crop,
-rects in top-left texture pixels with the feet as pivot, authored at 4×
-(`meta.scale`). `npm run check:roster` fails on any sprite set that breaks
-it. A swipe beyond the first may be omitted (the Spearman's restored shield
+renderer share, generated from the roster so nothing can drift: frames
+keyed `<sprite>/<clip>/<n>` (`ready` 2 frames, `walk` the roster's walk
+cycle, `swipe-i` the i-th attack's clip with its strike frame inside,
+`death` 8), an untinted accent frame `<sprite>/accent/<clip>/<n>` per body
+frame, a `<sprite>/portrait` crop, every frame inside the unit's envelope
+(from the roster's `stature`), rects in the engine's convention (`y` from
+the texture's bottom, `meta.origin: "bottom-left"`) with the feet as pivot,
+authored at 4× (`meta.scale`), contract version 2. The same contract holds
+for every race: a unit's clip names, frame counts, strike frames and
+envelope are identical whichever atlas draws it, and the renderer never
+branches on race. `npm run check:roster` fails on any atlas that breaks it,
+naming the unit, the race and the clip. A swipe beyond the first may be omitted (the Spearman's restored shield
 bash, `swipe-4`, is): the renderer then plays the first swipe time-warped so
 the strike frames coincide, and the check prints a note.
 
